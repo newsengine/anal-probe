@@ -1,5 +1,5 @@
 {
-  "name": "@newsengine/saas-security-kit",
+  "name": "@newsengine/anal-probe",
   "version": "0.1.0",
   "description": "Reusable security checks for SaaS apps: a black-box URL probe (headers/TLS/security.txt/cookies/CORS) + white-box multi-tenant/IDOR test helpers + checklist & CI templates. Drop into any repo.",
   "type": "module",
