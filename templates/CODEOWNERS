@@ -1,0 +1,8 @@
+# Require review on the highest-risk paths. Enforced only when branch protection
+# "Require review from Code Owners" is enabled. Replace @your-org/security with the real team.
+# Adjust the globs to your repo layout.
+**/auth*           @your-org/security
+**/crypto*         @your-org/security
+**/*billing*       @your-org/security
+**/webhook*        @your-org/security
+migrations/**      @your-org/security

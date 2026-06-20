@@ -1,0 +1,31 @@
+# Reusable security probe — call from ANY repo's workflow:
+#
+#   jobs:
+#     security:
+#       uses: newsengine/saas-security-kit/.github/workflows/probe.yml@main
+#       with:
+#         url: https://your-deploy.example.com
+#         cors_path: /api/public/health   # optional
+#         fail_on: high                    # high | medium | any (default high)
+#         allow_report_only_csp: true      # optional, while CSP is still Report-Only
+#
+name: security-probe
+on:
+  workflow_call:
+    inputs:
+      url: { required: true, type: string }
+      cors_path: { required: false, type: string, default: '' }
+      fail_on: { required: false, type: string, default: 'high' }
+      allow_report_only_csp: { required: false, type: boolean, default: false }
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run saas-security-kit probe
+        shell: bash
+        run: |
+          ARGS=("${{ inputs.url }}" --fail-on "${{ inputs.fail_on }}")
+          if [ -n "${{ inputs.cors_path }}" ]; then ARGS+=(--cors-path "${{ inputs.cors_path }}"); fi
+          if [ "${{ inputs.allow_report_only_csp }}" = "true" ]; then ARGS+=(--allow-report-only-csp); fi
+          npx --yes github:newsengine/saas-security-kit security-kit "${ARGS[@]}"

@@ -1,0 +1,6 @@
+# RFC 9116 — copy to public/.well-known/security.txt and fill in YOURDOMAIN + Expires.
+Contact: mailto:security@YOURDOMAIN
+Expires: 2027-01-01T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://YOURDOMAIN/.well-known/security.txt
+Policy: https://YOURDOMAIN/.well-known/security.txt
