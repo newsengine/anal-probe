@@ -55,20 +55,42 @@ security-kit audit --prod --level moderate --json
 
 > Roadmap: all listed checks are implemented. Future ideas (PRs welcome): TLS protocol/cipher grading, CSP directive linting, and an authenticated-crawl mode.
 
-## Use it in CI across all repos (recommended)
+## Use it in CI across all repos
+
+This repo is **private**, so other repos can't `uses:` its reusable workflow or `npx github:` it in CI
+without auth. The portable pattern that works for a private kit is **checkout-with-token + run the
+committed `dist/`** (this repo commits its build, so no build step is needed):
+
+**One-time:** create a fine-grained PAT (or GitHub App token) with **Contents: Read** on
+`newsengine/anal-probe` and add it as a secret named `ANALPROBE_TOKEN` — make it an **org secret** so
+every repo reuses the same one.
+
 ```yaml
 # .github/workflows/security.yml in ANY repo
 name: security
 on: [pull_request, workflow_dispatch]
 jobs:
   probe:
-    uses: newsengine/anal-probe/.github/workflows/probe.yml@main
-    with:
-      url: https://your-deploy.example.com
-      cors_path: /api/public/health        # optional
-      fail_on: high                         # high | medium | any
-      allow_report_only_csp: true           # while CSP is still Report-Only
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { repository: newsengine/anal-probe, token: '${{ secrets.ANALPROBE_TOKEN }}', path: .kit }
+      - run: node .kit/dist/cli.js https://your-deploy.example.com --allow-report-only-csp --fail-on high
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with: { repository: newsengine/anal-probe, token: '${{ secrets.ANALPROBE_TOKEN }}', path: .kit }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm ci
+      - run: node .kit/dist/cli.js audit --level high
 ```
+
+> The bundled `.github/workflows/{probe,audit}.yml` reusable workflows (called via `uses:`) work when
+> this repo is **public**, or private with org "Actions access" enabled + a token. The checkout pattern
+> above needs neither and is the recommended path while this stays private.
 
 ## Use the CLI locally / ad-hoc
 ```bash
