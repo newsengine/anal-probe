@@ -1,4 +1,4 @@
-# @newsengine/saas-security-kit
+# @newsengine/anal-probe
 
 Reusable security checks for our SaaS apps — drop into **any** repo.
 
@@ -17,7 +17,7 @@ name: security
 on: [pull_request, workflow_dispatch]
 jobs:
   probe:
-    uses: newsengine/saas-security-kit/.github/workflows/probe.yml@main
+    uses: newsengine/anal-probe/.github/workflows/probe.yml@main
     with:
       url: https://your-deploy.example.com
       cors_path: /api/public/health        # optional
@@ -27,14 +27,14 @@ jobs:
 
 ## Use the CLI locally / ad-hoc
 ```bash
-npx github:newsengine/saas-security-kit security-kit https://app.example.com \
+npx github:newsengine/anal-probe security-kit https://app.example.com \
   --cors-path /api/public/health --allow-report-only-csp --fail-on high
 # add --json for machine-readable output
 ```
 
 ## Use the white-box helpers in your tests
 ```ts
-import { idorProbe, checkSecurityHeaders } from '@newsengine/saas-security-kit';
+import { idorProbe, checkSecurityHeaders } from '@newsengine/anal-probe';
 
 // Cross-tenant: authenticate as tenant B, try to read tenant A's resources — must be denied.
 const results = await idorProbe(tenantB, [

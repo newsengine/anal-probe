@@ -8,15 +8,33 @@
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist", "templates"],
+  "files": [
+    "dist",
+    "templates"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "probe": "node --experimental-strip-types src/cli.ts",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "prepare": "npm run build"
   },
-  "engines": { "node": ">=20" },
-  "keywords": ["security", "saas", "owasp", "headers", "csp", "idor", "multi-tenant", "ci"],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "security",
+    "saas",
+    "owasp",
+    "headers",
+    "csp",
+    "idor",
+    "multi-tenant",
+    "ci"
+  ],
   "license": "MIT",
-  "devDependencies": { "typescript": "^5.5.0", "@types/node": "^20.0.0" }
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^20.0.0"
+  }
 }
