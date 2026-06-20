@@ -2,6 +2,7 @@
 // Black-box security probe for any deployed SaaS app. Given a base URL, it makes a few HTTP requests
 // and evaluates security posture from the OUTSIDE (no source access) — so it works against any of our
 // repos' deploys identically. Returns structured findings; the CLI turns these into a report + exit code.
+import tls from 'node:tls';
 
 export type Severity = 'high' | 'medium' | 'low' | 'info';
 export interface Finding {
@@ -35,6 +36,38 @@ async function safeFetch(url: string, init?: RequestInit): Promise<Response | nu
     return null;
   }
 }
+
+// Days until the served TLS certificate expires (null if it can't be determined). Uses a raw TLS
+// connection because fetch() doesn't expose the peer certificate.
+function tlsCertDaysRemaining(host: string, port = 443): Promise<number | null> {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v: number | null) => { if (!done) { done = true; resolve(v); } };
+    try {
+      const socket = tls.connect({ host, port, servername: host, timeout: 8000 }, () => {
+        const cert = socket.getPeerCertificate();
+        socket.end();
+        if (!cert || !cert.valid_to) return finish(null);
+        finish(Math.floor((new Date(cert.valid_to).getTime() - Date.now()) / 86_400_000));
+      });
+      socket.on('error', () => finish(null));
+      socket.on('timeout', () => { socket.destroy(); finish(null); });
+    } catch {
+      finish(null);
+    }
+  });
+}
+
+// Sensitive paths that should NEVER be publicly served, with a signature so a SPA's 200+index.html
+// fallback isn't a false positive — we only flag when the body actually looks like the secret file.
+const SENSITIVE_PATHS: { path: string; signature: RegExp }[] = [
+  { path: '/.git/HEAD', signature: /^(ref:\s|[0-9a-f]{40})/ },
+  { path: '/.git/config', signature: /\[core\]/ },
+  { path: '/.env', signature: /^[A-Z0-9_]+=/m },
+  { path: '/.env.local', signature: /^[A-Z0-9_]+=/m },
+  { path: '/.env.production', signature: /^[A-Z0-9_]+=/m },
+  { path: '/.DS_Store', signature: /^Bud1/ },
+];
 
 export async function probe(baseUrl: string, opts: ProbeOptions = {}): Promise<Finding[]> {
   const findings: Finding[] = [];
@@ -128,6 +161,58 @@ export async function probe(baseUrl: string, opts: ProbeOptions = {}): Promise<F
       // origin WITH credentials is the dangerous combination.
       const dangerous = reflectsEvil && acac;
       add({ id: 'cors.reflection', title: 'CORS origin reflection', severity: dangerous ? 'high' : 'info', pass: !dangerous, detail: `ACAO=${acao || '(none)'} ACAC=${acac}` });
+    }
+  }
+
+  // 7) TLS certificate expiry (HTTPS only).
+  if (u.protocol === 'https:') {
+    const days = await tlsCertDaysRemaining(u.hostname, Number(u.port) || 443);
+    if (days === null) {
+      add({ id: 'tls.expiry', title: 'TLS cert expiry not determinable', severity: 'info', pass: true, detail: 'could not read the peer certificate' });
+    } else {
+      const sev: Severity = days < 14 ? 'high' : days < 30 ? 'medium' : 'low';
+      add({ id: 'tls.expiry', title: `TLS cert expires in ${days} day(s)`, severity: sev, pass: days >= 14, detail: days < 14 ? 'certificate expires very soon — renew now' : `${days} days remaining` });
+    }
+  }
+
+  // 8) Sensitive file exposure (.git/.env/.DS_Store) — only flags when the body matches the file's
+  // signature, so a SPA returning index.html for unknown paths is not a false positive.
+  for (const sp of SENSITIVE_PATHS) {
+    const r = await safeFetch(origin + sp.path, { redirect: 'manual' });
+    if (r && r.status === 200) {
+      const ct = (r.headers.get('content-type') || '').toLowerCase();
+      const body = (await r.text().catch(() => '')).slice(0, 2000);
+      const looksHtml = ct.includes('text/html') || /<!doctype html|<html/i.test(body);
+      const exposed = !looksHtml && sp.signature.test(body);
+      if (exposed) add({ id: `exposure${sp.path}`, title: `Exposed ${sp.path}`, severity: 'high', pass: false, detail: `${sp.path} is publicly readable` });
+    }
+  }
+
+  // 9) Mixed content + 10) source-map exposure — parse the main document's HTML.
+  const html = await res.clone().text().catch(() => '');
+  if (html) {
+    if (u.protocol === 'https:') {
+      const mixed = [...html.matchAll(/\b(?:src|href)\s*=\s*["'](http:\/\/[^"']+)["']/gi)]
+        .map((m) => m[1])
+        .filter((x) => !/^http:\/\/(www\.w3\.org|localhost|127\.0\.0\.1)/i.test(x));
+      add({ id: 'mixed-content', title: mixed.length ? `Mixed content (${mixed.length})` : 'No mixed content', severity: 'medium', pass: mixed.length === 0, detail: mixed.length ? `http:// resources on an https page, e.g. ${mixed[0]}` : 'no insecure http:// resources referenced' });
+    }
+    // Source maps: for each same-origin script, check if a sibling .map is served.
+    const scripts = [...html.matchAll(/<script[^>]+src\s*=\s*["']([^"']+)["']/gi)]
+      .map((m) => m[1])
+      .map((s) => { try { return new URL(s, origin).toString(); } catch { return ''; } })
+      .filter((s) => s.startsWith(origin) && s.endsWith('.js'))
+      .slice(0, 5);
+    let mapFound: string | null = null;
+    for (const js of scripts) {
+      const mr = await safeFetch(js + '.map', { redirect: 'manual' });
+      if (mr && mr.status === 200) {
+        const b = (await mr.text().catch(() => '')).slice(0, 200);
+        if (b.includes('"sources"') || b.trimStart().startsWith('{')) { mapFound = js + '.map'; break; }
+      }
+    }
+    if (scripts.length) {
+      add({ id: 'sourcemaps', title: mapFound ? 'Source maps exposed' : 'No source maps exposed', severity: 'low', pass: !mapFound, detail: mapFound ? `source map served at ${mapFound} (leaks original source)` : 'no .map served for the main bundles' });
     }
   }
 

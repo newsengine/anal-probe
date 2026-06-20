@@ -30,6 +30,17 @@ Runs against a deployed URL — no source access — so every deploy is checked 
 | 11 | **Cookie flags** (`cookie.<name>`) | medium | Every `Set-Cookie` carries `Secure` + `HttpOnly` + `SameSite` (one finding per cookie). |
 | 12 | **security.txt** (`securitytxt`) | low | `/.well-known/security.txt` exists and has the RFC 9116 required `Contact` + `Expires` fields. |
 | 13 | **Dangerous CORS reflection** (`cors.reflection`) | high | With `--cors-path`, sends `Origin: https://evil.example`; **fails** only if the server reflects that arbitrary origin **and** sets `Access-Control-Allow-Credentials: true` (the exploitable combo). A bare wildcard `*` without credentials is treated as info/OK for public endpoints. |
+| 14 | **TLS cert expiry** (`tls.expiry`) | high&lt;14d / med&lt;30d | Reads the served certificate and fails when it expires in &lt; 14 days (medium under 30). |
+| 15 | **Sensitive file exposure** (`exposure/...`) | high | `/.git/HEAD`, `/.git/config`, `/.env`, `/.env.local`, `/.env.production`, `/.DS_Store` must not be publicly readable. Only flags when the body matches the file's signature (a SPA's 200+index.html fallback is not a false positive). |
+| 16 | **Mixed content** (`mixed-content`) | medium | On an HTTPS page, no `http://` resources are referenced in the HTML. |
+| 17 | **Source-map exposure** (`sourcemaps`) | low | The page's main bundles don't serve an adjacent `.js.map` (which leaks original source). |
+
+### Dependency audit (`security-kit audit`)
+Runs `npm audit` in the current repo and gates on severity:
+```bash
+security-kit audit --level high     # fail on any high/critical advisory (default)
+security-kit audit --prod --level moderate --json
+```
 
 ### White-box helpers (import into your own test suite)
 | Helper | What it checks |
@@ -38,7 +49,7 @@ Runs against a deployed URL — no source access — so every deploy is checked 
 | **`checkSecurityHeaders(headers, {requireEnforcedCsp?})`** | Returns problems for missing/weak **HSTS**, **`nosniff`**, **`Referrer-Policy`**, and **CSP** (enforced, or Report-Only when not required). |
 | **`checkCookieFlags(setCookie)`** | Returns problems if a cookie lacks **`Secure`**, **`HttpOnly`**, or **`SameSite`**. |
 
-> Roadmap (not yet implemented): TLS cert/expiry inspection, mixed-content scan, open-redirect probe, rate-limit/`Retry-After` check, `.git`/`.env`/source-map exposure, and dependency-audit (`npm audit`) wrapper. PRs welcome.
+> Roadmap (not yet implemented): open-redirect probe, rate-limit/`Retry-After` check, subresource-integrity check, and a cookie-`__Host-` prefix check. PRs welcome.
 
 ## Use it in CI across all repos (recommended)
 ```yaml

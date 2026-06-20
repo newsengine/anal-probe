@@ -4,3 +4,4 @@ export {
   idorProbe, checkSecurityHeaders, checkCookieFlags,
   type IdorCase, type IdorResult, type TenantAuth,
 } from './testkit.js';
+export { runNpmAudit, failsAtLevel, type AuditResult } from './audit.js';
