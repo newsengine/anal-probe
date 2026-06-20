@@ -115,6 +115,9 @@ export async function probe(baseUrl, opts = {}) {
             const sameSite = /;\s*samesite=/i.test(c);
             const ok = secure && httpOnly && sameSite;
             add({ id: `cookie.${name}`, title: `Cookie ${name} flags`, severity: 'medium', pass: ok, detail: `Secure=${secure} HttpOnly=${httpOnly} SameSite=${sameSite}` });
+            // Defense-in-depth: a session-ish cookie ideally uses the __Host- (or __Secure-) prefix.
+            const prefixed = name.startsWith('__Host-') || name.startsWith('__Secure-');
+            add({ id: `cookie-prefix.${name}`, title: `Cookie ${name} prefix`, severity: 'info', pass: prefixed, detail: prefixed ? 'uses __Host-/__Secure- prefix' : 'consider a __Host- prefix for session cookies' });
         }
     }
     // 5) security.txt (RFC 9116).
@@ -201,6 +204,43 @@ export async function probe(baseUrl, opts = {}) {
         if (scripts.length) {
             add({ id: 'sourcemaps', title: mapFound ? 'Source maps exposed' : 'No source maps exposed', severity: 'low', pass: !mapFound, detail: mapFound ? `source map served at ${mapFound} (leaks original source)` : 'no .map served for the main bundles' });
         }
+        // 11) Subresource Integrity: cross-origin <script>/<link> should carry an integrity attribute.
+        const tags = [...html.matchAll(/<(?:script|link)\b[^>]*>/gi)].map((m) => m[0]);
+        const crossOriginNoSri = tags.filter((t) => {
+            const m = t.match(/(?:src|href)\s*=\s*["'](https?:\/\/[^"']+)["']/i);
+            if (!m)
+                return false;
+            let isCross = true;
+            try {
+                isCross = new URL(m[1]).origin !== origin;
+            }
+            catch { /* keep */ }
+            const isScriptish = /<script/i.test(t) || /rel\s*=\s*["']stylesheet["']/i.test(t);
+            return isCross && isScriptish && !/\bintegrity\s*=/.test(t);
+        });
+        add({ id: 'sri', title: crossOriginNoSri.length ? `Cross-origin assets without SRI (${crossOriginNoSri.length})` : 'Cross-origin assets use SRI (or none present)', severity: 'low', pass: crossOriginNoSri.length === 0, detail: crossOriginNoSri.length ? 'add integrity="sha384-..." + crossorigin to third-party <script>/<link>' : 'no un-pinned cross-origin scripts/styles' });
+    }
+    // 12) Open redirect: try common redirect params pointed at an external origin; fail if it 3xx's there.
+    const evilRedirect = 'https://evil.example/';
+    const redirectParams = ['next', 'redirect', 'redirect_uri', 'url', 'return', 'returnTo', 'dest', 'continue'];
+    let openRedirectParam = null;
+    for (const p of redirectParams) {
+        const r = await safeFetch(`${origin}/?${p}=${encodeURIComponent(evilRedirect)}`, { redirect: 'manual' });
+        if (r && r.status >= 300 && r.status < 400) {
+            const loc = r.headers.get('location') || '';
+            if (/^https?:\/\/evil\.example/i.test(loc) || loc.startsWith('//evil.example')) {
+                openRedirectParam = p;
+                break;
+            }
+        }
+    }
+    add({ id: 'open-redirect', title: openRedirectParam ? `Open redirect via ?${openRedirectParam}` : 'No open redirect on common params', severity: 'high', pass: !openRedirectParam, detail: openRedirectParam ? `?${openRedirectParam}= redirects off-domain to an attacker URL` : 'common redirect params do not redirect off-domain' });
+    // 13) Rate limiting (opt-in): burst a path and expect a 429 / Retry-After.
+    if (opts.rateLimitPath) {
+        const target = origin + opts.rateLimitPath;
+        const burst = await Promise.all(Array.from({ length: 25 }, () => safeFetch(target)));
+        const got429 = burst.some((r) => r && r.status === 429);
+        add({ id: 'rate-limit', title: got429 ? 'Rate limiting active' : 'No rate limiting observed', severity: 'medium', pass: got429, detail: got429 ? '25-request burst was throttled (429)' : `25 rapid requests to ${opts.rateLimitPath} were not throttled` });
     }
     return findings;
 }

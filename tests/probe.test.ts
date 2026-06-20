@@ -86,6 +86,36 @@ test('npm audit wrapper runs and reports counts (kit has no vuln deps)', async (
   assert.equal(failsAtLevel(r, 'high'), (r.counts.high ?? 0) + (r.counts.critical ?? 0) > 0);
 });
 
+test('flags an open redirect via a common param', async () => {
+  const srv = await server((req, res) => {
+    const u = new URL(req.url!, 'http://x');
+    const next = u.searchParams.get('next');
+    if (next) { res.writeHead(302, { location: next }); res.end(); return; }
+    res.writeHead(200, { 'content-type': 'text/html' }); res.end('<html>ok</html>');
+  });
+  const f = await probe(srv.url);
+  srv.close();
+  assert.ok(f.find((x) => x.id === 'open-redirect' && !x.pass), 'open redirect flagged');
+});
+
+test('flags a cross-origin script without SRI', async () => {
+  const srv = await server((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end('<script src="https://cdn.example.com/x.js"></script>');
+  });
+  const f = await probe(srv.url);
+  srv.close();
+  assert.ok(f.find((x) => x.id === 'sri' && !x.pass), 'missing SRI flagged');
+});
+
+test('rate-limit check passes when a burst is throttled (429)', async () => {
+  let n = 0;
+  const srv = await server((_req, res) => { n++; res.writeHead(n > 3 ? 429 : 200); res.end(); });
+  const f = await probe(srv.url, { rateLimitPath: '/api/x' });
+  srv.close();
+  assert.ok(f.find((x) => x.id === 'rate-limit' && x.pass), 'rate limiting detected');
+});
+
 test('idorProbe reports a cross-tenant leak', async () => {
   // Server that (wrongly) returns 200 regardless of who asks → simulates an IDOR hole.
   const leaky = await server((_req, res) => { res.writeHead(200); res.end('secret'); });

@@ -34,6 +34,10 @@ Runs against a deployed URL — no source access — so every deploy is checked 
 | 15 | **Sensitive file exposure** (`exposure/...`) | high | `/.git/HEAD`, `/.git/config`, `/.env`, `/.env.local`, `/.env.production`, `/.DS_Store` must not be publicly readable. Only flags when the body matches the file's signature (a SPA's 200+index.html fallback is not a false positive). |
 | 16 | **Mixed content** (`mixed-content`) | medium | On an HTTPS page, no `http://` resources are referenced in the HTML. |
 | 17 | **Source-map exposure** (`sourcemaps`) | low | The page's main bundles don't serve an adjacent `.js.map` (which leaks original source). |
+| 18 | **Open redirect** (`open-redirect`) | high | Common redirect params (`next`, `redirect`, `redirect_uri`, `url`, `return`, `returnTo`, `dest`, `continue`) don't 3xx to an off-domain attacker URL. |
+| 19 | **Rate limiting** (`rate-limit`) | medium | *Opt-in* (`--rate-limit-path`): a 25-request burst to the path is throttled (429). |
+| 20 | **Subresource Integrity** (`sri`) | low | Cross-origin `<script>`/`<link rel=stylesheet>` carry an `integrity` attribute. |
+| 21 | **Cookie prefix** (`cookie-prefix.<name>`) | info | Recommends a `__Host-`/`__Secure-` prefix on session cookies. |
 
 ### Dependency audit (`security-kit audit`)
 Runs `npm audit` in the current repo and gates on severity:
@@ -49,7 +53,7 @@ security-kit audit --prod --level moderate --json
 | **`checkSecurityHeaders(headers, {requireEnforcedCsp?})`** | Returns problems for missing/weak **HSTS**, **`nosniff`**, **`Referrer-Policy`**, and **CSP** (enforced, or Report-Only when not required). |
 | **`checkCookieFlags(setCookie)`** | Returns problems if a cookie lacks **`Secure`**, **`HttpOnly`**, or **`SameSite`**. |
 
-> Roadmap (not yet implemented): open-redirect probe, rate-limit/`Retry-After` check, subresource-integrity check, and a cookie-`__Host-` prefix check. PRs welcome.
+> Roadmap: all listed checks are implemented. Future ideas (PRs welcome): TLS protocol/cipher grading, CSP directive linting, and an authenticated-crawl mode.
 
 ## Use it in CI across all repos (recommended)
 ```yaml
@@ -69,6 +73,7 @@ jobs:
 ## Use the CLI locally / ad-hoc
 ```bash
 npx github:newsengine/anal-probe https://app.example.com \
+  --rate-limit-path /api/public/health \
   --cors-path /api/public/health --allow-report-only-csp --fail-on high
 # add --json for machine-readable output
 ```

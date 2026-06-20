@@ -40,6 +40,7 @@ async function main() {
   const findings = await probe(url, {
     corsTestPath: arg('--cors-path'),
     allowReportOnlyCsp: flag('--allow-report-only-csp'),
+    rateLimitPath: arg('--rate-limit-path'),
   });
   const sum = summarize(findings);
 

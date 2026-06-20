@@ -13,6 +13,8 @@ export interface ProbeOptions {
     corsTestPath?: string;
     /** Treat these missing headers as info (not fail) — e.g. CSP if you only ship Report-Only. */
     allowReportOnlyCsp?: boolean;
+    /** Opt-in: a path to burst-test for rate limiting (sends ~25 quick requests; expects a 429). */
+    rateLimitPath?: string;
 }
 export declare function probe(baseUrl: string, opts?: ProbeOptions): Promise<Finding[]>;
 export declare function summarize(findings: Finding[]): {
