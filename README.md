@@ -27,7 +27,7 @@ jobs:
 
 ## Use the CLI locally / ad-hoc
 ```bash
-npx github:newsengine/anal-probe security-kit https://app.example.com \
+npx github:newsengine/anal-probe https://app.example.com \
   --cors-path /api/public/health --allow-report-only-csp --fail-on high
 # add --json for machine-readable output
 ```
