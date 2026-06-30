@@ -1,0 +1,351 @@
+// src/checks.ts
+// Every check takes the shared ScanContext (homepage fetched once) and returns Finding[]. They are
+// grouped by Category. All are black-box: a URL is the only input, so the same kit works against any
+// vibe-coded app — Vite, Next, Astro, Rails, whatever — without touching the source.
+
+import type { Finding, ScanContext, Severity } from './types.js';
+import {
+  safeFetch, fetchText, headerGet, resolveUrl, sameOrigin, html as H, scanSecrets,
+} from './core.js';
+
+const f = (
+  category: Finding['category'],
+  id: string,
+  title: string,
+  severity: Severity,
+  pass: boolean,
+  detail: string,
+  fix?: string,
+): Finding => ({ category, id, title, severity, pass, detail, fix });
+
+// ───────────────────────────── security (headers / TLS / CORS / cookies) ─────────────────────────
+
+const REQUIRED_HEADERS: { name: string; severity: Severity; validate?: (v: string) => boolean; hint: string; fix: string }[] = [
+  { name: 'strict-transport-security', severity: 'high', validate: (v) => /max-age=\d{5,}/.test(v), hint: 'HSTS with a long max-age', fix: 'Send Strict-Transport-Security: max-age=31536000; includeSubDomains' },
+  { name: 'x-content-type-options', severity: 'medium', validate: (v) => v.toLowerCase().includes('nosniff'), hint: 'nosniff', fix: 'Send X-Content-Type-Options: nosniff' },
+  { name: 'referrer-policy', severity: 'low', hint: 'e.g. strict-origin-when-cross-origin', fix: 'Send Referrer-Policy: strict-origin-when-cross-origin' },
+  { name: 'x-frame-options', severity: 'medium', hint: 'SAMEORIGIN/DENY or CSP frame-ancestors', fix: 'Send X-Frame-Options: SAMEORIGIN (or a CSP frame-ancestors directive)' },
+  { name: 'content-security-policy', severity: 'high', hint: 'a Content-Security-Policy (enforced)', fix: 'Add a Content-Security-Policy header to stop injected scripts' },
+];
+
+export async function securityChecks(ctx: ScanContext): Promise<Finding[]> {
+  const out: Finding[] = [];
+  const { origin, url } = ctx;
+
+  // TLS + redirect
+  if (url.protocol !== 'https:') {
+    out.push(f('security', 'tls.scheme', 'Site is not served over HTTPS', 'high', false, `URL uses ${url.protocol}`, 'Serve the app over https:// — most hosts (Cloudflare/Vercel/Netlify) do this automatically.'));
+  } else {
+    out.push(f('security', 'tls.scheme', 'Served over HTTPS', 'high', true, origin));
+    const httpRes = await safeFetch(origin.replace('https:', 'http:'));
+    if (httpRes) {
+      const loc = httpRes.headers.get('location') || '';
+      const redirects = httpRes.status >= 300 && httpRes.status < 400 && loc.startsWith('https:');
+      out.push(f('security', 'tls.redirect', 'HTTP redirects to HTTPS', 'medium', redirects, redirects ? `HTTP ${httpRes.status} -> ${loc}` : `http:// did not 3xx->https (status ${httpRes.status})`, 'Redirect all http:// traffic to https://.'));
+    }
+  }
+
+  if (!ctx.res) {
+    out.push(f('security', 'reachability', 'Could not reach the site', 'high', false, `fetch ${origin} failed`));
+    return out;
+  }
+  const h = ctx.headers;
+
+  for (const req of REQUIRED_HEADERS) {
+    let val = h.get(req.name);
+    if (req.name === 'content-security-policy' && !val) {
+      const ro = h.get('content-security-policy-report-only');
+      if (ro && ctx.opts.allowReportOnlyCsp) {
+        out.push(f('security', 'header.content-security-policy', 'CSP present (Report-Only)', 'info', true, 'Only Report-Only is set — enforce once tuned.'));
+        continue;
+      }
+    }
+    const present = !!val;
+    const valid = present && (!req.validate || req.validate(val!));
+    out.push(f('security', `header.${req.name}`, present ? `Header ${req.name}${valid ? '' : ' (weak)'}` : `Missing ${req.name}`, req.severity, valid, present ? `${req.name}: ${val}`.slice(0, 200) : `expected ${req.hint}`, req.fix));
+  }
+
+  // Version-banner disclosure
+  for (const banner of ['server', 'x-powered-by']) {
+    const v = h.get(banner);
+    if (v && /\d/.test(v)) {
+      out.push(f('security', `disclosure.${banner}`, `Version banner in ${banner}`, 'low', false, `${banner}: ${v}`, `Strip the ${banner} header so you don't advertise exact versions to attackers.`));
+    }
+  }
+
+  // Cookie flags
+  const setCookie = (h as any).getSetCookie?.() as string[] | undefined;
+  if (setCookie?.length) {
+    for (const c of setCookie) {
+      const name = c.split('=')[0];
+      const secure = /;\s*secure/i.test(c);
+      const httpOnly = /;\s*httponly/i.test(c);
+      const sameSite = /;\s*samesite=/i.test(c);
+      const ok = secure && httpOnly && sameSite;
+      out.push(f('security', `cookie.${name}`, `Cookie ${name} flags`, 'medium', ok, `Secure=${secure} HttpOnly=${httpOnly} SameSite=${sameSite}`, 'Set Secure + HttpOnly + SameSite on session cookies so they can\'t be stolen by scripts or sent cross-site.'));
+    }
+  }
+
+  // security.txt
+  const stPath = ctx.opts.securityTxtPath || '/.well-known/security.txt';
+  const st = await safeFetch(origin + stPath, { redirect: 'follow' });
+  if (st && st.ok) {
+    const body = await st.text();
+    const ok = /^contact:/im.test(body) && /^expires:/im.test(body);
+    out.push(f('security', 'securitytxt', 'security.txt present', 'low', ok, ok ? 'has Contact + Expires' : 'present but missing Contact/Expires (RFC 9116)'));
+  } else {
+    out.push(f('security', 'securitytxt', 'No security.txt', 'low', false, `expected at ${stPath}`, 'Add /.well-known/security.txt so researchers know how to report bugs to you.'));
+  }
+
+  // Dangerous CORS reflection
+  if (ctx.opts.corsTestPath) {
+    const evil = 'https://evil.example';
+    const cors = await safeFetch(origin + ctx.opts.corsTestPath, { headers: { Origin: evil } });
+    if (cors) {
+      const acao = cors.headers.get('access-control-allow-origin') || '';
+      const acac = (cors.headers.get('access-control-allow-credentials') || '').toLowerCase() === 'true';
+      const dangerous = acao === evil && acac;
+      out.push(f('security', 'cors.reflection', 'CORS origin reflection', dangerous ? 'high' : 'info', !dangerous, `ACAO=${acao || '(none)'} ACAC=${acac}`, dangerous ? 'Never reflect an arbitrary Origin while also allowing credentials — that lets any site read authenticated responses.' : undefined));
+    }
+  }
+
+  return out;
+}
+
+// ───────────────────────────── secrets (keys leaked to the browser) ──────────────────────────────
+
+export async function secretChecks(ctx: ScanContext): Promise<Finding[]> {
+  const out: Finding[] = [];
+  if (!ctx.res) return out;
+
+  // Scan the HTML itself + every same-origin script bundle (capped) — this is where vibe coders most
+  // often leak a key by hardcoding it into client code.
+  const blobs: { where: string; text: string }[] = [{ where: 'HTML', text: ctx.html }];
+  const scripts = H.scripts(ctx.html)
+    .map((s) => resolveUrl(ctx.baseUrl, s))
+    .filter((u): u is string => !!u && sameOrigin(u, ctx.baseUrl))
+    .slice(0, ctx.opts.maxCrawl ?? 25);
+
+  let mapExposed = 0;
+  for (const src of scripts) {
+    const text = await fetchText(src);
+    if (!text) continue;
+    blobs.push({ where: src.replace(ctx.origin, ''), text });
+    // Source map exposure → the app's original (unminified) source is downloadable.
+    const mapRef = text.match(/[#@]\s*sourceMappingURL=([^\s'"]+)/)?.[1];
+    if (mapRef && !mapRef.startsWith('data:')) {
+      const mapUrl = resolveUrl(src, mapRef);
+      if (mapUrl) {
+        const map = await fetchText(mapUrl, undefined, 200_000);
+        if (map.includes('"sources"')) mapExposed++;
+      }
+    }
+  }
+
+  let total = 0;
+  for (const { where, text } of blobs) {
+    for (const hit of scanSecrets(text)) {
+      total++;
+      out.push(f('secrets', `secret.${hit.ruleId}`, `${hit.name} exposed in client code`, hit.severity, false, `${hit.name} (${hit.sample}) found in ${where}`, 'Remove the key from client code and rotate it immediately. Secret keys belong in server-side env vars only.'));
+    }
+  }
+  if (total === 0) out.push(f('secrets', 'secret.none', 'No hardcoded secrets in client code', 'info', true, `scanned ${blobs.length} file(s)`));
+
+  if (mapExposed > 0) {
+    out.push(f('secrets', 'sourcemap.exposed', 'Source maps are publicly downloadable', 'medium', false, `${mapExposed} reachable .map file(s) expose your original source`, 'Disable source-map upload to production (or restrict access) so your unminified code isn\'t downloadable.'));
+  }
+
+  return out;
+}
+
+// ───────────────────────────── exposure (.env / .git / config / debug) ───────────────────────────
+
+// Each probe validates the BODY, not just a 200 — SPAs return 200 + index.html for unknown paths, so
+// a naive status check would false-positive on every single one.
+const EXPOSED_PATHS: { path: string; severity: Severity; looksReal: (body: string, ct: string) => boolean; label: string }[] = [
+  { path: '/.env', severity: 'high', label: '.env file', looksReal: (b) => /^[A-Z0-9_]+\s*=/m.test(b) && !/<html/i.test(b) },
+  { path: '/.env.local', severity: 'high', label: '.env.local', looksReal: (b) => /^[A-Z0-9_]+\s*=/m.test(b) && !/<html/i.test(b) },
+  { path: '/.env.production', severity: 'high', label: '.env.production', looksReal: (b) => /^[A-Z0-9_]+\s*=/m.test(b) && !/<html/i.test(b) },
+  { path: '/.git/config', severity: 'high', label: '.git/config', looksReal: (b) => /\[core\]|\[remote/i.test(b) },
+  { path: '/.git/HEAD', severity: 'high', label: '.git/HEAD', looksReal: (b) => /^ref:\s/m.test(b) },
+  { path: '/wrangler.toml', severity: 'high', label: 'wrangler.toml', looksReal: (b) => /compatibility_date|^name\s*=/m.test(b) },
+  { path: '/package.json', severity: 'low', label: 'package.json', looksReal: (b, ct) => ct.includes('json') && /"(?:dependencies|name)"\s*:/.test(b) },
+  { path: '/.npmrc', severity: 'high', label: '.npmrc', looksReal: (b) => /_authToken|registry=/.test(b) && !/<html/i.test(b) },
+  { path: '/docker-compose.yml', severity: 'medium', label: 'docker-compose.yml', looksReal: (b) => /^services:/m.test(b) },
+  { path: '/.DS_Store', severity: 'low', label: '.DS_Store', looksReal: (b) => b.startsWith('\x00\x00\x00\x01Bud1') || /Bud1/.test(b.slice(0, 8)) },
+  { path: '/backup.sql', severity: 'high', label: 'backup.sql', looksReal: (b) => /(CREATE TABLE|INSERT INTO)/i.test(b) },
+];
+
+export async function exposureChecks(ctx: ScanContext): Promise<Finding[]> {
+  const out: Finding[] = [];
+  let any = false;
+  for (const p of EXPOSED_PATHS) {
+    const res = await safeFetch(ctx.origin + p.path, { redirect: 'follow' });
+    if (!res || !res.ok) continue;
+    const ct = (res.headers.get('content-type') || '').toLowerCase();
+    const body = (await res.text()).slice(0, 4000);
+    if (p.looksReal(body, ct)) {
+      any = true;
+      out.push(f('exposure', `exposed${p.path}`, `${p.label} is publicly reachable`, p.severity, false, `GET ${p.path} -> 200 and the body looks like a real ${p.label}`, `Block ${p.path} at the host/router — config and dotfiles must never be web-served.`));
+    }
+  }
+
+  // Verbose error / stack-trace leak on an unknown path.
+  const probe404 = await safeFetch(ctx.origin + '/__anal_probe_does_not_exist__', { redirect: 'follow' });
+  if (probe404) {
+    const body = (await probe404.text()).slice(0, 8000);
+    const leak = /\bat\s+[\w$.]+\s+\(.*:\d+:\d+\)|Traceback \(most recent call last\)|node_modules\/|\/var\/task\/|ECONNREFUSED|Sequelize\w+Error|PG::|psql:/.test(body);
+    if (leak) {
+      any = true;
+      out.push(f('exposure', 'error.stacktrace', 'Error pages leak stack traces / internal paths', 'medium', false, 'an unknown URL returned a server stack trace or internal file paths', 'Return a generic error page in production; never echo stack traces or file paths to users.'));
+    }
+  }
+
+  // GraphQL introspection enabled (leaks the whole API schema).
+  for (const gqlPath of ['/graphql', '/api/graphql']) {
+    const res = await safeFetch(ctx.origin + gqlPath, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query: '{__schema{queryType{name}}}' }),
+    });
+    if (res && res.ok) {
+      const body = await res.text();
+      if (/"__schema"|"queryType"/.test(body)) {
+        any = true;
+        out.push(f('exposure', `graphql.introspection${gqlPath}`, 'GraphQL introspection is enabled', 'medium', false, `${gqlPath} answers __schema queries`, 'Disable introspection in production so attackers can\'t map your entire API.'));
+        break;
+      }
+    }
+  }
+
+  if (!any) out.push(f('exposure', 'exposure.none', 'No exposed config/debug surfaces found', 'info', true, 'checked dotfiles, configs, error pages, GraphQL introspection'));
+  return out;
+}
+
+// ───────────────────────────── reliability (broken links/images, mixed content) ──────────────────
+
+export async function reliabilityChecks(ctx: ScanContext): Promise<Finding[]> {
+  const out: Finding[] = [];
+  if (!ctx.res) return out;
+
+  // Main document status / content-type sanity.
+  const ct = (ctx.headers.get('content-type') || '').toLowerCase();
+  out.push(f('reliability', 'home.status', `Homepage returns ${ctx.res.status}`, ctx.res.status < 400 ? 'info' : 'high', ctx.res.status < 400, `${ctx.res.status} ${ct}`));
+
+  // Mixed content: http:// resources on an https page.
+  if (ctx.url.protocol === 'https:') {
+    const insecure = [...new Set(H.insecureRefs(ctx.html))];
+    if (insecure.length) {
+      out.push(f('reliability', 'mixed-content', 'Page loads resources over http:// (mixed content)', 'medium', false, `${insecure.length} insecure ref(s), e.g. ${insecure[0]}`, 'Load every script/image/style over https:// or browsers will block them.'));
+    }
+  }
+
+  // Broken same-origin links + images (sampled).
+  const cap = ctx.opts.maxCrawl ?? 25;
+  const targets = [...new Set([
+    ...H.links(ctx.html).map((u) => resolveUrl(ctx.baseUrl, u)),
+    ...H.images(ctx.html).map((i) => resolveUrl(ctx.baseUrl, i.src)),
+  ].filter((u): u is string => !!u && sameOrigin(u, ctx.baseUrl)))].slice(0, cap);
+
+  const broken: string[] = [];
+  for (const t of targets) {
+    let res = await safeFetch(t, { method: 'HEAD', redirect: 'follow' });
+    if (res && (res.status === 405 || res.status === 501)) res = await safeFetch(t, { method: 'GET', redirect: 'follow' });
+    if (res && res.status >= 400) broken.push(`${res.status} ${t.replace(ctx.origin, '')}`);
+  }
+  if (broken.length) {
+    out.push(f('reliability', 'broken-links', `${broken.length} broken link(s)/image(s)`, 'medium', false, broken.slice(0, 8).join(', '), 'Fix or remove dead links and missing images — they break navigation and look unfinished.'));
+  } else if (targets.length) {
+    out.push(f('reliability', 'broken-links', 'No broken same-origin links/images', 'info', true, `checked ${targets.length} URL(s)`));
+  }
+
+  return out;
+}
+
+// ───────────────────────────── seo ───────────────────────────────────────────────────────────────
+
+export async function seoChecks(ctx: ScanContext): Promise<Finding[]> {
+  const out: Finding[] = [];
+  if (!ctx.res) return out;
+  const h = ctx.html;
+
+  const title = H.title(h);
+  out.push(f('seo', 'seo.title', title ? 'Has a <title>' : 'Missing <title>', title ? 'info' : 'medium', !!title && title.length >= 3, title ? `"${title.slice(0, 70)}" (${title.length} chars)` : 'no <title> tag', 'Add a descriptive <title> — it\'s the headline in Google results and browser tabs.'));
+
+  const desc = H.metaContent(h, 'description');
+  out.push(f('seo', 'seo.description', desc ? 'Has a meta description' : 'Missing meta description', desc ? 'info' : 'low', !!desc, desc ? `${desc.length} chars` : 'no <meta name="description">', 'Add <meta name="description"> — Google shows it as the snippet under your title.'));
+
+  const og = H.metaContent(h, 'og:title') || H.metaContent(h, 'og:image');
+  out.push(f('seo', 'seo.opengraph', og ? 'Has Open Graph tags' : 'Missing Open Graph tags', og ? 'info' : 'low', !!og, og ? 'og:* present' : 'no og:title/og:image', 'Add Open Graph tags so links unfurl with a title + image when shared on social/chat.'));
+
+  out.push(f('seo', 'seo.canonical', H.canonical(h) ? 'Has a canonical URL' : 'No canonical URL', 'low', !!H.canonical(h), H.canonical(h) || 'no <link rel="canonical">', 'Add <link rel="canonical"> to avoid duplicate-content penalties.'));
+
+  const h1 = H.h1Count(h);
+  out.push(f('seo', 'seo.h1', h1 === 1 ? 'Exactly one <h1>' : `${h1} <h1> tags`, h1 === 1 ? 'info' : 'low', h1 === 1, `${h1} <h1>`, 'Use exactly one <h1> per page describing what the page is about.'));
+
+  for (const [name, path] of [['robots.txt', '/robots.txt'], ['sitemap.xml', '/sitemap.xml']] as const) {
+    const res = await safeFetch(ctx.origin + path, { redirect: 'follow' });
+    const ok = !!res && res.ok;
+    out.push(f('seo', `seo.${name}`, ok ? `${name} present` : `No ${name}`, 'low', ok, ok ? `200 at ${path}` : `missing ${path}`, `Add ${path} so search engines can crawl/index your site correctly.`));
+  }
+
+  return out;
+}
+
+// ───────────────────────────── a11y ──────────────────────────────────────────────────────────────
+
+export async function a11yChecks(ctx: ScanContext): Promise<Finding[]> {
+  const out: Finding[] = [];
+  if (!ctx.res) return out;
+  const h = ctx.html;
+
+  out.push(f('a11y', 'a11y.lang', H.hasLang(h) ? '<html lang> set' : 'Missing <html lang>', H.hasLang(h) ? 'info' : 'medium', H.hasLang(h), H.hasLang(h) ? 'lang attribute present' : 'no lang on <html>', 'Add lang="en" (or your language) to <html> so screen readers pronounce content correctly.'));
+
+  out.push(f('a11y', 'a11y.viewport', H.hasViewport(h) ? 'Has viewport meta' : 'Missing viewport meta', H.hasViewport(h) ? 'info' : 'medium', H.hasViewport(h), H.hasViewport(h) ? 'viewport set' : 'no <meta name="viewport">', 'Add <meta name="viewport" content="width=device-width, initial-scale=1"> or the site breaks on mobile.'));
+
+  const imgs = H.images(h);
+  const noAlt = imgs.filter((i) => !i.hasAlt).length;
+  if (imgs.length) {
+    out.push(f('a11y', 'a11y.alt', noAlt ? `${noAlt}/${imgs.length} images missing alt` : 'All images have alt text', noAlt ? 'low' : 'info', noAlt === 0, `${noAlt} of ${imgs.length} <img> lack alt`, 'Give every <img> an alt="" describing it (empty alt for decorative images) for screen readers + SEO.'));
+  }
+
+  const inputs = H.inputsNeedingLabel(h);
+  const labels = H.labelCount(h);
+  if (inputs > 0) {
+    const ok = labels >= inputs;
+    out.push(f('a11y', 'a11y.labels', ok ? 'Form inputs appear labelled' : 'Form inputs may lack labels', ok ? 'info' : 'low', ok, `${inputs} labelable input(s), ${labels} <label>(s)`, 'Pair every form input with a <label> so it\'s usable with a screen reader.'));
+  }
+
+  return out;
+}
+
+// ───────────────────────────── performance ───────────────────────────────────────────────────────
+
+export async function performanceChecks(ctx: ScanContext): Promise<Finding[]> {
+  const out: Finding[] = [];
+  if (!ctx.res) return out;
+
+  // Compression on the HTML document.
+  const probe = await safeFetch(ctx.origin, { redirect: 'follow', headers: { 'accept-encoding': 'br, gzip' } });
+  const enc = probe?.headers.get('content-encoding') || '';
+  out.push(f('performance', 'perf.compression', enc ? `Compression: ${enc}` : 'No compression detected', enc ? 'info' : 'low', !!enc, enc ? `content-encoding: ${enc}` : 'document served uncompressed', 'Enable gzip/brotli compression — it shrinks pages ~70% and most hosts toggle it on.'));
+
+  // Page weight (HTML only — a proxy; huge HTML usually means an un-split bundle dumped inline).
+  const bytes = Buffer.byteLength(ctx.html, 'utf8');
+  out.push(f('performance', 'perf.html-weight', bytes > 1_000_000 ? 'Very large HTML document' : 'HTML size OK', bytes > 1_000_000 ? 'low' : 'info', bytes <= 1_000_000, `${(bytes / 1024).toFixed(0)} KB of HTML`, 'Trim inline content / code-split — a 1MB+ HTML doc is slow on mobile.'));
+
+  // Script count.
+  const scripts = H.scripts(ctx.html).length;
+  out.push(f('performance', 'perf.scripts', scripts > 30 ? `${scripts} script files` : 'Reasonable script count', scripts > 30 ? 'low' : 'info', scripts <= 30, `${scripts} <script src>`, 'Bundle/code-split your JS — dozens of separate script requests slow first load.'));
+
+  // Cache headers on the first static asset.
+  const firstScript = H.scripts(ctx.html).map((s) => resolveUrl(ctx.baseUrl, s)).find((u): u is string => !!u && sameOrigin(u, ctx.baseUrl));
+  if (firstScript) {
+    const a = await safeFetch(firstScript, { redirect: 'follow' });
+    const cc = a?.headers.get('cache-control') || '';
+    const cached = /max-age=\d{4,}|immutable/.test(cc);
+    out.push(f('performance', 'perf.caching', cached ? 'Static assets are cacheable' : 'Static assets lack long cache headers', cached ? 'info' : 'low', cached, cc ? `cache-control: ${cc}` : 'no long-lived cache-control on JS', 'Serve hashed assets with Cache-Control: max-age=31536000, immutable so repeat visits are instant.'));
+  }
+
+  return out;
+}

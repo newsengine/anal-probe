@@ -1,23 +1,19 @@
-export type Severity = 'high' | 'medium' | 'low' | 'info';
-export interface Finding {
-    id: string;
-    title: string;
-    severity: Severity;
-    pass: boolean;
-    detail: string;
-}
-export interface ProbeOptions {
-    /** Paths expected to exist for the security.txt / CORS checks. */
-    securityTxtPath?: string;
-    /** An API path to test CORS reflection against (should be a CORS-enabled endpoint). */
-    corsTestPath?: string;
-    /** Treat these missing headers as info (not fail) — e.g. CSP if you only ship Report-Only. */
-    allowReportOnlyCsp?: boolean;
-}
-export declare function probe(baseUrl: string, opts?: ProbeOptions): Promise<Finding[]>;
+import type { Category, Finding, ScanContext, ScanOptions, Severity } from './types.js';
+export type { Category, Finding, ScanContext, ScanOptions, Severity };
+export type ProbeOptions = ScanOptions;
+export declare const ALL_CATEGORIES: Category[];
+/** Run the comprehensive scan. Returns every finding across the selected categories. */
+export declare function probe(baseUrl: string, opts?: ScanOptions): Promise<Finding[]>;
+/** Alias — reads better for the full-app use case. */
+export declare const scan: typeof probe;
 export declare function summarize(findings: Finding[]): {
     passed: number;
     failed: number;
     failHigh: number;
     failMedium: number;
+    failLow: number;
+    byCategory: Record<string, {
+        passed: number;
+        failed: number;
+    }>;
 };

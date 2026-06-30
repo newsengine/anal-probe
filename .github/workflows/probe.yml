@@ -1,31 +1,37 @@
-# Reusable security probe — call from ANY repo's workflow:
+# Reusable full-app scan — call from ANY repo's workflow:
 #
 #   jobs:
-#     security:
+#     scan:
 #       uses: newsengine/anal-probe/.github/workflows/probe.yml@main
 #       with:
 #         url: https://your-deploy.example.com
-#         cors_path: /api/public/health   # optional
-#         fail_on: high                    # high | medium | any (default high)
-#         allow_report_only_csp: true      # optional, while CSP is still Report-Only
+#         only: secrets,exposure,security   # optional — restrict to these categories
+#         skip: seo,a11y                     # optional — run everything except these
+#         cors_path: /api/public/health      # optional
+#         fail_on: high                       # high | medium | any (default high)
+#         allow_report_only_csp: true         # optional, while CSP is still Report-Only
 #
-name: security-probe
+name: app-scan
 on:
   workflow_call:
     inputs:
       url: { required: true, type: string }
+      only: { required: false, type: string, default: '' }
+      skip: { required: false, type: string, default: '' }
       cors_path: { required: false, type: string, default: '' }
       fail_on: { required: false, type: string, default: 'high' }
       allow_report_only_csp: { required: false, type: boolean, default: false }
 
 jobs:
-  probe:
+  scan:
     runs-on: ubuntu-latest
     steps:
-      - name: Run saas-security-kit probe
+      - name: Run anal-probe full scan
         shell: bash
         run: |
           ARGS=("${{ inputs.url }}" --fail-on "${{ inputs.fail_on }}")
+          if [ -n "${{ inputs.only }}" ]; then ARGS+=(--only "${{ inputs.only }}"); fi
+          if [ -n "${{ inputs.skip }}" ]; then ARGS+=(--skip "${{ inputs.skip }}"); fi
           if [ -n "${{ inputs.cors_path }}" ]; then ARGS+=(--cors-path "${{ inputs.cors_path }}"); fi
           if [ "${{ inputs.allow_report_only_csp }}" = "true" ]; then ARGS+=(--allow-report-only-csp); fi
           npx --yes github:newsengine/anal-probe "${ARGS[@]}"
