@@ -2,6 +2,34 @@
 // Zero-dependency HTTP + HTML + secret-scanning helpers. Kept regex-based on purpose: the whole kit
 // must run via `npx` with no install and no headless browser, so a vibe coder can point it at a
 // deploy in one command. Regex HTML parsing is "good enough" for black-box posture checks.
+import tls from 'node:tls';
+/**
+ * Days until the served TLS certificate expires (null if it can't be determined). Uses a raw TLS
+ * connection because fetch() doesn't expose the peer certificate.
+ */
+export function tlsCertDaysRemaining(host, port = 443) {
+    return new Promise((resolve) => {
+        let done = false;
+        const finish = (v) => { if (!done) {
+            done = true;
+            resolve(v);
+        } };
+        try {
+            const socket = tls.connect({ host, port, servername: host, timeout: 8000 }, () => {
+                const cert = socket.getPeerCertificate();
+                socket.end();
+                if (!cert || !cert.valid_to)
+                    return finish(null);
+                finish(Math.floor((new Date(cert.valid_to).getTime() - Date.now()) / 86_400_000));
+            });
+            socket.on('error', () => finish(null));
+            socket.on('timeout', () => { socket.destroy(); finish(null); });
+        }
+        catch {
+            finish(null);
+        }
+    });
+}
 export async function safeFetch(url, init) {
     try {
         return await fetch(url, { redirect: 'manual', ...init });

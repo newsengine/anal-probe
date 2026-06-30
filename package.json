@@ -1,9 +1,10 @@
 {
   "name": "@newsengine/anal-probe",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Point it at any deployed app and it finds what's wrong: leaked API keys in your JS bundle, exposed .env/.git/config, broken links, missing security headers, SEO/accessibility/performance gaps — all black-box from a URL, zero install. Plus white-box multi-tenant/IDOR test helpers. Drop into any repo.",
   "type": "module",
   "bin": {
+    "anal-probe": "dist/cli.js",
     "security-kit": "dist/cli.js"
   },
   "main": "dist/index.js",

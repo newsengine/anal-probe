@@ -2,7 +2,7 @@
 // Every check takes the shared ScanContext (homepage fetched once) and returns Finding[]. They are
 // grouped by Category. All are black-box: a URL is the only input, so the same kit works against any
 // vibe-coded app — Vite, Next, Astro, Rails, whatever — without touching the source.
-import { safeFetch, fetchText, resolveUrl, sameOrigin, html as H, scanSecrets, } from './core.js';
+import { safeFetch, fetchText, resolveUrl, sameOrigin, html as H, scanSecrets, tlsCertDaysRemaining, } from './core.js';
 const f = (category, id, title, severity, pass, detail, fix) => ({ category, id, title, severity, pass, detail, fix });
 // ───────────────────────────── security (headers / TLS / CORS / cookies) ─────────────────────────
 const REQUIRED_HEADERS = [
@@ -63,6 +63,9 @@ export async function securityChecks(ctx) {
             const sameSite = /;\s*samesite=/i.test(c);
             const ok = secure && httpOnly && sameSite;
             out.push(f('security', `cookie.${name}`, `Cookie ${name} flags`, 'medium', ok, `Secure=${secure} HttpOnly=${httpOnly} SameSite=${sameSite}`, 'Set Secure + HttpOnly + SameSite on session cookies so they can\'t be stolen by scripts or sent cross-site.'));
+            // Defense-in-depth: a session-ish cookie ideally carries a __Host-/__Secure- prefix.
+            const prefixed = name.startsWith('__Host-') || name.startsWith('__Secure-');
+            out.push(f('security', `cookie-prefix.${name}`, `Cookie ${name} prefix`, 'info', prefixed, prefixed ? 'uses __Host-/__Secure- prefix' : 'consider a __Host- prefix for session cookies', prefixed ? undefined : 'Rename session cookies to __Host-<name> so the browser pins them to your origin + https.'));
         }
     }
     // security.txt
@@ -86,6 +89,52 @@ export async function securityChecks(ctx) {
             const dangerous = acao === evil && acac;
             out.push(f('security', 'cors.reflection', 'CORS origin reflection', dangerous ? 'high' : 'info', !dangerous, `ACAO=${acao || '(none)'} ACAC=${acac}`, dangerous ? 'Never reflect an arbitrary Origin while also allowing credentials — that lets any site read authenticated responses.' : undefined));
         }
+    }
+    // TLS certificate expiry (https only) — reads the served cert via a raw TLS socket.
+    if (url.protocol === 'https:') {
+        const days = await tlsCertDaysRemaining(url.hostname, Number(url.port) || 443);
+        if (days === null) {
+            out.push(f('security', 'tls.expiry', 'TLS cert expiry not determinable', 'info', true, 'could not read the peer certificate'));
+        }
+        else {
+            const sev = days < 14 ? 'high' : days < 30 ? 'medium' : 'low';
+            out.push(f('security', 'tls.expiry', `TLS cert expires in ${days} day(s)`, sev, days >= 14, days < 14 ? 'certificate expires very soon — renew now' : `${days} days remaining`, days >= 30 ? undefined : 'Renew the TLS certificate (or enable auto-renewal — Let\'s Encrypt/most hosts do this for you).'));
+        }
+    }
+    // Subresource Integrity: cross-origin <script>/<link rel=stylesheet> should carry an integrity attr.
+    const sriTags = [...ctx.html.matchAll(/<(?:script|link)\b[^>]*>/gi)].map((m) => m[0]);
+    const crossOriginNoSri = sriTags.filter((t) => {
+        const m = t.match(/(?:src|href)\s*=\s*["'](https?:\/\/[^"']+)["']/i);
+        if (!m)
+            return false;
+        const isCross = !sameOrigin(m[1], ctx.baseUrl);
+        const isScriptish = /<script/i.test(t) || /rel\s*=\s*["']stylesheet["']/i.test(t);
+        return isCross && isScriptish && !/\bintegrity\s*=/.test(t);
+    });
+    if (sriTags.length) {
+        out.push(f('security', 'sri', crossOriginNoSri.length ? `${crossOriginNoSri.length} cross-origin asset(s) without SRI` : 'Cross-origin assets use SRI (or none present)', 'low', crossOriginNoSri.length === 0, crossOriginNoSri.length ? 'a compromised third-party CDN could inject code' : 'no un-pinned cross-origin scripts/styles', crossOriginNoSri.length ? 'Add integrity="sha384-…" + crossorigin to third-party <script>/<link> so a hacked CDN can\'t swap the file.' : undefined));
+    }
+    // Open redirect: try common redirect params pointed off-domain; fail if the server 3xx's there.
+    const evilRedirect = 'https://evil.example/';
+    const redirectParams = ['next', 'redirect', 'redirect_uri', 'url', 'return', 'returnTo', 'dest', 'continue'];
+    let openRedirectParam = null;
+    for (const p of redirectParams) {
+        const r = await safeFetch(`${origin}/?${p}=${encodeURIComponent(evilRedirect)}`, { redirect: 'manual' });
+        if (r && r.status >= 300 && r.status < 400) {
+            const loc = r.headers.get('location') || '';
+            if (/^https?:\/\/evil\.example/i.test(loc) || loc.startsWith('//evil.example')) {
+                openRedirectParam = p;
+                break;
+            }
+        }
+    }
+    out.push(f('security', 'open-redirect', openRedirectParam ? `Open redirect via ?${openRedirectParam}` : 'No open redirect on common params', 'high', !openRedirectParam, openRedirectParam ? `?${openRedirectParam}= redirects off-domain to an attacker URL` : 'common redirect params do not redirect off-domain', openRedirectParam ? 'Validate redirect targets against an allow-list of your own paths — never redirect to an arbitrary user-supplied URL.' : undefined));
+    // Rate limiting (opt-in): burst a path and expect a 429.
+    if (ctx.opts.rateLimitPath) {
+        const target = origin + ctx.opts.rateLimitPath;
+        const burst = await Promise.all(Array.from({ length: 25 }, () => safeFetch(target)));
+        const got429 = burst.some((r) => r && r.status === 429);
+        out.push(f('security', 'rate-limit', got429 ? 'Rate limiting active' : 'No rate limiting observed', 'medium', got429, got429 ? '25-request burst was throttled (429)' : `25 rapid requests to ${ctx.opts.rateLimitPath} were not throttled`, got429 ? undefined : 'Add rate limiting on auth/public endpoints so they can\'t be brute-forced or hammered.'));
     }
     return out;
 }

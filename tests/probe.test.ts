@@ -6,6 +6,7 @@ import http from 'node:http';
 import { probe, summarize } from '../dist/probe.js';
 import { scanSecrets, html as H } from '../dist/core.js';
 import { checkSecurityHeaders, checkCookieFlags, idorProbe } from '../dist/testkit.js';
+import { failsAtLevel } from '../dist/audit.js';
 
 function server(handler: http.RequestListener): Promise<{ url: string; close: () => void }> {
   return new Promise((resolve) => {
@@ -47,6 +48,53 @@ test('probe passes a hardened server', async () => {
   srv.close();
   assert.ok(findings.find((f) => f.id === 'header.content-security-policy' && f.pass), 'CSP passes');
   assert.ok(findings.find((f) => f.id === 'securitytxt' && f.pass), 'security.txt passes');
+});
+
+// ── ported security checks (open-redirect / sri / cookie-prefix / rate-limit) ─
+test('open-redirect: flags a server that 3xx-es a redirect param off-domain', async () => {
+  const srv = await server((req, res) => {
+    const u = new URL(req.url || '/', 'http://x');
+    const next = u.searchParams.get('next');
+    if (next) { res.writeHead(302, { location: next }); res.end(); return; }
+    res.writeHead(200, { 'content-type': 'text/html' }); res.end('<html>ok</html>');
+  });
+  const findings = await probe(srv.url, { only: ['security'] });
+  srv.close();
+  assert.ok(findings.find((f) => f.id === 'open-redirect' && !f.pass), 'flags the open redirect');
+});
+
+test('sri: flags a cross-origin script with no integrity, passes when pinned', async () => {
+  const unpinned = await server((_req, res) => { res.writeHead(200, { 'content-type': 'text/html' }); res.end('<html><script src="https://cdn.example.com/x.js"></script></html>'); });
+  const a = await probe(unpinned.url, { only: ['security'] }); unpinned.close();
+  assert.ok(a.find((f) => f.id === 'sri' && !f.pass), 'flags un-pinned cross-origin script');
+
+  const pinned = await server((_req, res) => { res.writeHead(200, { 'content-type': 'text/html' }); res.end('<html><script src="https://cdn.example.com/x.js" integrity="sha384-abc" crossorigin></script></html>'); });
+  const b = await probe(pinned.url, { only: ['security'] }); pinned.close();
+  assert.ok(b.find((f) => f.id === 'sri' && f.pass), 'passes when integrity is present');
+});
+
+test('cookie-prefix: info-fails on an un-prefixed cookie', async () => {
+  const srv = await server((_req, res) => { res.writeHead(200, { 'content-type': 'text/html', 'set-cookie': 'sid=abc; Secure; HttpOnly; SameSite=Lax' }); res.end('<html>ok</html>'); });
+  const findings = await probe(srv.url, { only: ['security'] });
+  srv.close();
+  assert.ok(findings.find((f) => f.id === 'cookie.sid' && f.pass), 'cookie flags pass');
+  assert.ok(findings.find((f) => f.id === 'cookie-prefix.sid' && !f.pass), 'recommends a __Host-/__Secure- prefix');
+});
+
+test('rate-limit (opt-in): passes when the path throttles with 429', async () => {
+  let n = 0;
+  const srv = await server((_req, res) => { n++; if (n > 5) { res.writeHead(429); res.end('slow down'); return; } res.writeHead(200, { 'content-type': 'text/html' }); res.end('<html>ok</html>'); });
+  const findings = await probe(srv.url, { only: ['security'], rateLimitPath: '/' });
+  srv.close();
+  assert.ok(findings.find((f) => f.id === 'rate-limit' && f.pass), 'detects throttling');
+});
+
+// ── dependency audit (pure severity gating) ──────────────────────────────────
+test('audit failsAtLevel gates at/above the threshold', () => {
+  assert.equal(failsAtLevel({ counts: { high: 1 }, total: 1 }, 'high'), true, 'high vuln fails at high');
+  assert.equal(failsAtLevel({ counts: { low: 2 }, total: 2 }, 'high'), false, 'low vuln does not fail at high');
+  assert.equal(failsAtLevel({ counts: { low: 2 }, total: 2 }, 'low'), true, 'low vuln fails at low');
+  assert.equal(failsAtLevel({ counts: {}, total: 0 }, 'high'), false, 'clean audit passes');
 });
 
 // ── secrets ────────────────────────────────────────────────────────────────

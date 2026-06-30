@@ -30,6 +30,8 @@ export interface ScanOptions {
   securityTxtPath?: string;
   /** An API path to test CORS reflection against. */
   corsTestPath?: string;
+  /** Opt-in: a path to burst-test for rate limiting (sends ~25 quick requests; expects a 429). */
+  rateLimitPath?: string;
   /** Treat CSP-Report-Only as a pass (apps mid-rollout). */
   allowReportOnlyCsp?: boolean;
   /** Only run these categories (default: all). */

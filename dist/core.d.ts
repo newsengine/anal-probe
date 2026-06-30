@@ -1,3 +1,8 @@
+/**
+ * Days until the served TLS certificate expires (null if it can't be determined). Uses a raw TLS
+ * connection because fetch() doesn't expose the peer certificate.
+ */
+export declare function tlsCertDaysRemaining(host: string, port?: number): Promise<number | null>;
 export declare function safeFetch(url: string, init?: RequestInit): Promise<Response | null>;
 /** Fetch text with a cap so a giant bundle can't blow up memory. Returns '' on any failure. */
 export declare function fetchText(url: string, init?: RequestInit, maxBytes?: number): Promise<string>;

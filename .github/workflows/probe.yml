@@ -19,6 +19,7 @@ on:
       only: { required: false, type: string, default: '' }
       skip: { required: false, type: string, default: '' }
       cors_path: { required: false, type: string, default: '' }
+      rate_limit_path: { required: false, type: string, default: '' }
       fail_on: { required: false, type: string, default: 'high' }
       allow_report_only_csp: { required: false, type: boolean, default: false }
 
@@ -33,5 +34,6 @@ jobs:
           if [ -n "${{ inputs.only }}" ]; then ARGS+=(--only "${{ inputs.only }}"); fi
           if [ -n "${{ inputs.skip }}" ]; then ARGS+=(--skip "${{ inputs.skip }}"); fi
           if [ -n "${{ inputs.cors_path }}" ]; then ARGS+=(--cors-path "${{ inputs.cors_path }}"); fi
+          if [ -n "${{ inputs.rate_limit_path }}" ]; then ARGS+=(--rate-limit-path "${{ inputs.rate_limit_path }}"); fi
           if [ "${{ inputs.allow_report_only_csp }}" = "true" ]; then ARGS+=(--allow-report-only-csp); fi
           npx --yes github:newsengine/anal-probe "${ARGS[@]}"

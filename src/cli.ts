@@ -7,12 +7,17 @@
 //   --only security,secrets         only run these categories
 //   --skip seo,a11y                 run everything except these
 //   --cors-path /api/health         test CORS reflection on this path
+//   --rate-limit-path /api/health   burst-test this path for rate limiting (expects 429)
 //   --allow-report-only-csp         accept CSP Report-Only as a pass
 //   --max-crawl 25                  how many links/scripts to fetch-check
 //   --fail-on high|medium|any       CI exit threshold (default high)
 //   --json                          machine-readable output
+//
+// Subcommand:
+//   anal-probe audit [--prod] [--level low|moderate|high|critical] [--json]   # npm audit gate
 
 import { probe, summarize, ALL_CATEGORIES, type Category, type Finding, type Severity } from './probe.js';
+import { runNpmAudit, failsAtLevel } from './audit.js';
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(name);
@@ -27,10 +32,25 @@ const CAT_TITLE: Record<Category, string> = {
   reliability: '🔗 Reliability', seo: '🔎 SEO', a11y: '♿ Accessibility', performance: '⚡ Performance',
 };
 
+async function runAudit() {
+  const level = arg('--level') || 'high';
+  const result = await runNpmAudit(process.cwd(), flag('--prod'));
+  if (flag('--json')) { console.log(JSON.stringify(result, null, 2)); }
+  else if (result.error) { console.error('audit error:', result.error); }
+  else {
+    console.log(`\n🔐 anal-probe audit (npm audit)\n`);
+    for (const sev of ['critical', 'high', 'moderate', 'low', 'info']) console.log(`  ${sev}: ${result.counts[sev] ?? 0}`);
+    console.log(`\n${result.total} total advisories\n`);
+  }
+  process.exit(result.error ? 2 : failsAtLevel(result, level) ? 1 : 0);
+}
+
 async function main() {
+  if (process.argv[2] === 'audit') return runAudit();
+
   const url = process.argv[2];
   if (!url || url.startsWith('-')) {
-    console.error('usage: npx github:newsengine/anal-probe <url> [--only ...] [--skip ...] [--cors-path <p>] [--fail-on high|medium|any] [--json]');
+    console.error('usage:\n  npx github:newsengine/anal-probe <url> [--only ...] [--skip ...] [--cors-path <p>] [--rate-limit-path <p>] [--fail-on high|medium|any] [--json]\n  npx github:newsengine/anal-probe audit [--prod] [--level low|moderate|high|critical] [--json]');
     process.exit(2);
   }
 
@@ -38,6 +58,7 @@ async function main() {
     only: list(arg('--only')),
     skip: list(arg('--skip')),
     corsTestPath: arg('--cors-path'),
+    rateLimitPath: arg('--rate-limit-path'),
     allowReportOnlyCsp: flag('--allow-report-only-csp'),
     maxCrawl: arg('--max-crawl') ? Number(arg('--max-crawl')) : undefined,
   });
