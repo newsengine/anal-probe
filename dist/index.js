@@ -4,3 +4,6 @@ export { securityChecks, secretChecks, exposureChecks, reliabilityChecks, seoChe
 export { scanSecrets, SECRET_RULES, } from './core.js';
 export { idorProbe, checkSecurityHeaders, checkCookieFlags, } from './testkit.js';
 export { runNpmAudit, failsAtLevel, } from './audit.js';
+export { lintCsp } from './checks.js';
+export { toSarif } from './sarif.js';
+export { findingKey, buildBaseline, applyBaseline, } from './baseline.js';

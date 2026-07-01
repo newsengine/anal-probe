@@ -3,3 +3,6 @@ export { securityChecks, secretChecks, exposureChecks, reliabilityChecks, seoChe
 export { scanSecrets, SECRET_RULES, type SecretRule, type SecretHit, } from './core.js';
 export { idorProbe, checkSecurityHeaders, checkCookieFlags, type IdorCase, type IdorResult, type TenantAuth, } from './testkit.js';
 export { runNpmAudit, failsAtLevel, type AuditResult, } from './audit.js';
+export { lintCsp, type CspIssue } from './checks.js';
+export { toSarif, type SarifOptions } from './sarif.js';
+export { findingKey, buildBaseline, applyBaseline, type Baseline, type BaselineDiff, } from './baseline.js';

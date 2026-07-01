@@ -1,4 +1,13 @@
-import type { Finding, ScanContext } from './types.js';
+import type { Finding, ScanContext, Severity } from './types.js';
+export interface CspIssue {
+    id: string;
+    title: string;
+    severity: Severity;
+    detail: string;
+    fix: string;
+}
+/** Grade a CSP beyond mere presence: the weaknesses that actually let XSS through. Regex-free, zero-dep. */
+export declare function lintCsp(policy: string): CspIssue[];
 export declare function securityChecks(ctx: ScanContext): Promise<Finding[]>;
 export declare function secretChecks(ctx: ScanContext): Promise<Finding[]>;
 export declare function exposureChecks(ctx: ScanContext): Promise<Finding[]>;

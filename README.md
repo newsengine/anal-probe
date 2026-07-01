@@ -40,7 +40,8 @@ Homepage status, **broken same-origin links & images** (sampled HEAD/GET), and *
 
 ### 🔐 `security` — headers / TLS / CORS / cookies
 HTTPS + HTTP→HTTPS redirect, **HSTS**, **`nosniff`**, **`Referrer-Policy`**, **clickjacking**
-(`X-Frame-Options`/CSP), enforced **CSP** (`--allow-report-only-csp` to accept Report-Only mid-rollout),
+(`X-Frame-Options`/CSP), enforced **CSP** (`--allow-report-only-csp` to accept Report-Only mid-rollout)
+**graded for weakness** (`unsafe-inline`/`unsafe-eval`/wildcard sources, missing `object-src`/`base-uri`),
 **version-banner disclosure**, **cookie flags** (Secure+HttpOnly+SameSite) + **`__Host-` prefix**,
 **`security.txt`** (RFC 9116), **dangerous CORS reflection** (with `--cors-path`: fails only on
 reflect-arbitrary-origin **+** `Allow-Credentials: true` — a bare `*` without credentials is fine),
@@ -71,10 +72,9 @@ anal-probe audit --level high          # fail on any high/critical advisory (def
 anal-probe audit --prod --level moderate --json
 ```
 
-> Roadmap (PRs welcome): **SARIF output** (findings in GitHub's Security tab), **baseline/diff mode**
-> (fail only on *new* findings), a **CSP linter** (flag `unsafe-inline`/`unsafe-eval`/wildcards),
-> deeper **TLS** (protocol/cipher grading, HSTS-preload eligibility), **DNS/email hygiene**
-> (SPF/DMARC, dangling-CNAME takeover), and an **authenticated crawl** beyond the entry bundle.
+> Roadmap (PRs welcome): deeper **TLS** (protocol/cipher grading, HSTS-preload eligibility),
+> **DNS/email hygiene** (SPF/DMARC, dangling-CNAME takeover), and an **authenticated crawl**
+> beyond the entry bundle. (SARIF output, baseline/diff mode, and CSP linting have shipped.)
 
 ## Use it in CI across all repos (recommended)
 ```yaml
@@ -103,6 +103,28 @@ jobs:
 >     - run: node .kit/dist/cli.js https://your-deploy.example.com --fail-on high
 > ```
 
+### Findings in the GitHub Security tab (SARIF)
+`--sarif` emits SARIF 2.1.0; upload it so each finding becomes a code-scanning alert:
+```yaml
+  scan:
+    runs-on: ubuntu-latest
+    permissions: { security-events: write, contents: read }
+    steps:
+      - uses: actions/checkout@v4
+        with: { repository: newsengine/anal-probe, token: '${{ secrets.ANALPROBE_TOKEN }}', path: .kit }
+      - run: node .kit/dist/cli.js https://your-deploy.example.com --sarif > probe.sarif
+        continue-on-error: true          # don't block the upload; gate in a separate step if you want
+      - uses: github/codeql-action/upload-sarif@v3
+        with: { sarif_file: probe.sarif }
+```
+
+### Gate on regressions only (baseline)
+Snapshot today's debt once, commit it, then fail CI only on *new* findings:
+```bash
+node .kit/dist/cli.js https://your-deploy.example.com --write-baseline probe-baseline.json  # once, commit the file
+node .kit/dist/cli.js https://your-deploy.example.com --baseline probe-baseline.json --fail-on medium
+```
+
 ## Use the CLI locally / ad-hoc
 ```bash
 # full scan (all 7 categories)
@@ -115,7 +137,8 @@ npx github:newsengine/anal-probe https://app.example.com \
   --fail-on medium --json
 ```
 Flags: `--only <cats>` · `--skip <cats>` · `--cors-path <p>` · `--rate-limit-path <p>` · `--allow-report-only-csp`
-· `--max-crawl <n>` (links/scripts to fetch-check, default 25) · `--fail-on high|medium|any` · `--json`.
+· `--max-crawl <n>` (links/scripts to fetch-check, default 25) · `--fail-on high|medium|any` · `--json` · `--sarif`
+· `--baseline <file>` · `--write-baseline <file>`.
 
 ## Use the white-box helpers in your tests
 ```ts
