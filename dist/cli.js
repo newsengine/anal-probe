@@ -12,11 +12,25 @@
 //   --max-crawl 25                  how many links/scripts to fetch-check
 //   --fail-on high|medium|any       CI exit threshold (default high)
 //   --json                          machine-readable output
+//   --sarif                         emit SARIF 2.1.0 (for GitHub code scanning / upload-sarif)
+//   --baseline <file>               only fail on findings NOT in this baseline file
+//   --write-baseline <file>         write current failing findings as a baseline, then exit 0
 //
 // Subcommand:
 //   anal-probe audit [--prod] [--level low|moderate|high|critical] [--json]   # npm audit gate
+import { readFileSync, writeFileSync } from 'node:fs';
 import { probe, summarize, ALL_CATEGORIES } from './probe.js';
 import { runNpmAudit, failsAtLevel } from './audit.js';
+import { toSarif } from './sarif.js';
+import { buildBaseline, applyBaseline } from './baseline.js';
+const VERSION = (() => {
+    try {
+        return JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+    }
+    catch {
+        return '0.0.0';
+    }
+})();
 function arg(name) {
     const i = process.argv.indexOf(name);
     return i >= 0 ? process.argv[i + 1] : undefined;
@@ -62,8 +76,36 @@ async function main() {
         maxCrawl: arg('--max-crawl') ? Number(arg('--max-crawl')) : undefined,
     });
     const sum = summarize(findings);
-    if (flag('--json')) {
-        console.log(JSON.stringify({ url, summary: sum, findings }, null, 2));
+    // --write-baseline: snapshot today's failing findings and exit 0 (nothing to gate on the first run).
+    const writeBaselinePath = arg('--write-baseline');
+    if (writeBaselinePath) {
+        const baseline = buildBaseline(findings, url);
+        writeFileSync(writeBaselinePath, JSON.stringify(baseline, null, 2) + '\n');
+        console.error(`wrote baseline (${baseline.keys.length} finding(s)) to ${writeBaselinePath}`);
+        process.exit(0);
+    }
+    // --baseline: partition failing findings into new (gate on these) vs already-accepted.
+    const baselinePath = arg('--baseline');
+    let diff = null;
+    if (baselinePath) {
+        let baseline = { keys: [] };
+        try {
+            baseline = JSON.parse(readFileSync(baselinePath, 'utf8'));
+        }
+        catch (e) {
+            console.error(`could not read baseline ${baselinePath}: ${String(e?.message || e)}`);
+            process.exit(2);
+        }
+        diff = applyBaseline(findings, baseline);
+    }
+    // The set CI actually gates on: new-only when a baseline is in play, otherwise every failure.
+    const gateFails = diff ? diff.newFailures : findings.filter((f) => !f.pass);
+    if (flag('--sarif')) {
+        // Report new-only under a baseline so the Security tab shows regressions, not accepted debt.
+        console.log(JSON.stringify(toSarif(diff ? diff.newFailures : findings, { url, version: VERSION }), null, 2));
+    }
+    else if (flag('--json')) {
+        console.log(JSON.stringify({ url, summary: sum, findings, ...(diff ? { baseline: { new: diff.newFailures.length, accepted: diff.baselined.length } } : {}) }, null, 2));
     }
     else {
         console.log(`\n🔬 anal-probe — full app scan of ${url}\n`);
@@ -82,12 +124,17 @@ async function main() {
             }
             console.log('');
         }
-        console.log(`${sum.passed} passed, ${sum.failed} failed  (🟥 ${sum.failHigh} high · 🟧 ${sum.failMedium} medium · 🟨 ${sum.failLow} low)\n`);
+        console.log(`${sum.passed} passed, ${sum.failed} failed  (🟥 ${sum.failHigh} high · 🟧 ${sum.failMedium} medium · 🟨 ${sum.failLow} low)`);
+        if (diff)
+            console.log(`baseline: ${diff.newFailures.length} new · ${diff.baselined.length} accepted`);
+        console.log('');
     }
     const failOn = (arg('--fail-on') || 'high');
-    const shouldFail = failOn === 'any' ? sum.failed > 0 :
-        failOn === 'medium' ? sum.failHigh + sum.failMedium > 0 :
-            sum.failHigh > 0;
+    const gHigh = gateFails.filter((f) => f.severity === 'high').length;
+    const gMed = gateFails.filter((f) => f.severity === 'medium').length;
+    const shouldFail = failOn === 'any' ? gateFails.length > 0 :
+        failOn === 'medium' ? gHigh + gMed > 0 :
+            gHigh > 0;
     process.exit(shouldFail ? 1 : 0);
 }
 main().catch((e) => { console.error('probe error:', e); process.exit(2); });

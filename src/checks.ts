@@ -18,6 +18,44 @@ const f = (
   fix?: string,
 ): Finding => ({ category, id, title, severity, pass, detail, fix });
 
+// Parse a CSP header into a directive→sources map (lowercased directive names).
+function parseCsp(policy: string): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  for (const part of policy.split(';')) {
+    const [name, ...sources] = part.trim().split(/\s+/);
+    if (name) map.set(name.toLowerCase(), sources);
+  }
+  return map;
+}
+
+export interface CspIssue { id: string; title: string; severity: Severity; detail: string; fix: string }
+
+/** Grade a CSP beyond mere presence: the weaknesses that actually let XSS through. Regex-free, zero-dep. */
+export function lintCsp(policy: string): CspIssue[] {
+  const d = parseCsp(policy);
+  const issues: CspIssue[] = [];
+  // script-src falls back to default-src when absent (CSP semantics).
+  const scriptSrc = d.get('script-src') ?? d.get('default-src') ?? [];
+  const has = (list: string[], token: string) => list.some((s) => s.toLowerCase() === token);
+
+  if (has(scriptSrc, "'unsafe-inline'")) {
+    issues.push({ id: 'csp.unsafe-inline', title: "CSP allows 'unsafe-inline' scripts", severity: 'high', detail: "script-src includes 'unsafe-inline' — injected <script> and inline handlers still run, defeating most of the CSP", fix: "Drop 'unsafe-inline'; use nonces ('nonce-…') or hashes for the scripts you do need." });
+  }
+  if (has(scriptSrc, "'unsafe-eval'")) {
+    issues.push({ id: 'csp.unsafe-eval', title: "CSP allows 'unsafe-eval'", severity: 'medium', detail: "script-src includes 'unsafe-eval' — eval()/new Function() are allowed, widening the XSS surface", fix: "Remove 'unsafe-eval' and refactor any eval()/Function() usage." });
+  }
+  if (scriptSrc.some((s) => s === '*' || /^https?:$/i.test(s) || s === 'data:')) {
+    issues.push({ id: 'csp.wildcard-script', title: 'CSP script source is a wildcard', severity: 'high', detail: `script-src allows a wildcard source (${scriptSrc.find((s) => s === '*' || /^https?:$/i.test(s) || s === 'data:')}) — any host can supply scripts`, fix: 'Pin script-src to specific trusted origins (or self + nonces), not * / https: / data:.' });
+  }
+  if (!d.has('object-src') || !has(d.get('object-src')!, "'none'")) {
+    issues.push({ id: 'csp.object-src', title: "CSP missing object-src 'none'", severity: 'low', detail: 'without object-src \'none\', legacy plugin vectors (<object>/<embed>) remain open', fix: "Add object-src 'none'." });
+  }
+  if (!d.has('base-uri')) {
+    issues.push({ id: 'csp.base-uri', title: 'CSP missing base-uri', severity: 'low', detail: 'without base-uri, an injected <base> tag can hijack relative URLs', fix: "Add base-uri 'self' (or 'none')." });
+  }
+  return issues;
+}
+
 // ───────────────────────────── security (headers / TLS / CORS / cookies) ─────────────────────────
 
 const REQUIRED_HEADERS: { name: string; severity: Severity; validate?: (v: string) => boolean; hint: string; fix: string }[] = [
@@ -63,6 +101,14 @@ export async function securityChecks(ctx: ScanContext): Promise<Finding[]> {
     const present = !!val;
     const valid = present && (!req.validate || req.validate(val!));
     out.push(f('security', `header.${req.name}`, present ? `Header ${req.name}${valid ? '' : ' (weak)'}` : `Missing ${req.name}`, req.severity, valid, present ? `${req.name}: ${val}`.slice(0, 200) : `expected ${req.hint}`, req.fix));
+  }
+
+  // CSP linting: grade the policy that IS set (enforced, or Report-Only when the caller accepts it).
+  const cspToLint = h.get('content-security-policy') || (ctx.opts.allowReportOnlyCsp ? h.get('content-security-policy-report-only') : null);
+  if (cspToLint) {
+    for (const issue of lintCsp(cspToLint)) {
+      out.push(f('security', issue.id, issue.title, issue.severity, false, issue.detail, issue.fix));
+    }
   }
 
   // Version-banner disclosure

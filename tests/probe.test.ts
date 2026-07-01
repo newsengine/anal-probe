@@ -7,6 +7,9 @@ import { probe, summarize } from '../dist/probe.js';
 import { scanSecrets, html as H } from '../dist/core.js';
 import { checkSecurityHeaders, checkCookieFlags, idorProbe } from '../dist/testkit.js';
 import { failsAtLevel } from '../dist/audit.js';
+import { lintCsp } from '../dist/checks.js';
+import { toSarif } from '../dist/sarif.js';
+import { buildBaseline, applyBaseline } from '../dist/baseline.js';
 
 function server(handler: http.RequestListener): Promise<{ url: string; close: () => void }> {
   return new Promise((resolve) => {
@@ -95,6 +98,70 @@ test('audit failsAtLevel gates at/above the threshold', () => {
   assert.equal(failsAtLevel({ counts: { low: 2 }, total: 2 }, 'high'), false, 'low vuln does not fail at high');
   assert.equal(failsAtLevel({ counts: { low: 2 }, total: 2 }, 'low'), true, 'low vuln fails at low');
   assert.equal(failsAtLevel({ counts: {}, total: 0 }, 'high'), false, 'clean audit passes');
+});
+
+// ── CSP linter (#4) ──────────────────────────────────────────────────────────
+test('lintCsp flags unsafe-inline / unsafe-eval / wildcard, passes a strong policy', () => {
+  const weak = lintCsp("default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' *");
+  const ids = weak.map((i) => i.id);
+  assert.ok(ids.includes('csp.unsafe-inline'), 'flags unsafe-inline');
+  assert.ok(ids.includes('csp.unsafe-eval'), 'flags unsafe-eval');
+  assert.ok(ids.includes('csp.wildcard-script'), 'flags wildcard script source');
+
+  const strong = lintCsp("default-src 'self'; script-src 'self' 'nonce-abc'; object-src 'none'; base-uri 'self'");
+  assert.deepEqual(strong, [], 'a strong policy has no issues');
+});
+
+test('lintCsp: script-src falls back to default-src', () => {
+  const issues = lintCsp("default-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'");
+  assert.ok(issues.some((i) => i.id === 'csp.unsafe-inline'), 'inherits weakness from default-src');
+});
+
+test('probe emits csp.* findings when a weak CSP is served', async () => {
+  const srv = await server((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html', 'content-security-policy': "script-src 'self' 'unsafe-inline'" });
+    res.end('<html>ok</html>');
+  });
+  const findings = await probe(srv.url, { only: ['security'] });
+  srv.close();
+  assert.ok(findings.find((f) => f.id === 'csp.unsafe-inline' && !f.pass), 'surfaces the CSP weakness');
+});
+
+// ── SARIF output (#2) ────────────────────────────────────────────────────────
+test('toSarif produces valid 2.1.0 with rules + results for failing findings only', () => {
+  const findings = [
+    { id: 'header.hsts', category: 'security', title: 'Missing HSTS', severity: 'high', pass: false, detail: 'no HSTS', fix: 'Send HSTS' },
+    { id: 'seo.title', category: 'seo', title: 'Has title', severity: 'info', pass: true, detail: 'ok' },
+  ] as any;
+  const sarif = toSarif(findings, { url: 'https://x.example', version: '1.2.3' }) as any;
+  assert.equal(sarif.version, '2.1.0');
+  const run = sarif.runs[0];
+  assert.equal(run.tool.driver.name, 'anal-probe');
+  assert.equal(run.tool.driver.version, '1.2.3');
+  assert.equal(run.results.length, 1, 'only the failing finding becomes a result');
+  assert.equal(run.results[0].ruleId, 'header.hsts');
+  assert.equal(run.results[0].level, 'error', 'high maps to error');
+  assert.ok(run.tool.driver.rules.some((r: any) => r.id === 'header.hsts'), 'registers the rule');
+});
+
+// ── baseline / diff mode (#3) ────────────────────────────────────────────────
+test('baseline: buildBaseline records failing keys; applyBaseline splits new vs accepted', () => {
+  const findings = [
+    { id: 'header.hsts', category: 'security', title: 't', severity: 'high', pass: false, detail: 'd' },
+    { id: 'open-redirect', category: 'security', title: 't', severity: 'high', pass: false, detail: 'd' },
+    { id: 'seo.title', category: 'seo', title: 't', severity: 'info', pass: true, detail: 'd' },
+  ] as any;
+  const baseline = buildBaseline(findings, 'https://x');
+  assert.deepEqual(baseline.keys, ['header.hsts', 'open-redirect'], 'only failing keys, sorted');
+
+  // A later scan where hsts is still failing (accepted) but a NEW failure appears.
+  const later = [
+    { id: 'header.hsts', category: 'security', title: 't', severity: 'high', pass: false, detail: 'd' },
+    { id: 'sri', category: 'security', title: 't', severity: 'low', pass: false, detail: 'd' },
+  ] as any;
+  const diff = applyBaseline(later, baseline);
+  assert.deepEqual(diff.newFailures.map((f: any) => f.id), ['sri'], 'sri is new');
+  assert.deepEqual(diff.baselined.map((f: any) => f.id), ['header.hsts'], 'hsts is accepted');
 });
 
 // ── secrets ────────────────────────────────────────────────────────────────
