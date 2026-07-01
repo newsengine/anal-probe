@@ -1,9 +1,10 @@
 {
   "name": "@newsengine/anal-probe",
-  "version": "0.1.0",
-  "description": "Reusable security checks for SaaS apps: a black-box URL probe (headers/TLS/security.txt/cookies/CORS) + white-box multi-tenant/IDOR test helpers + checklist & CI templates. Drop into any repo.",
+  "version": "0.2.0",
+  "description": "Point it at any deployed app and it finds what's wrong: leaked API keys in your JS bundle, exposed .env/.git/config, broken links, missing security headers, SEO/accessibility/performance gaps — all black-box from a URL, zero install. Plus white-box multi-tenant/IDOR test helpers. Drop into any repo.",
   "type": "module",
   "bin": {
+    "anal-probe": "dist/cli.js",
     "security-kit": "dist/cli.js"
   },
   "main": "dist/index.js",
@@ -15,7 +16,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "probe": "node --experimental-strip-types src/cli.ts",
-    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "test": "npm run build && node --experimental-strip-types --test tests/*.test.ts",
     "prepublishOnly": "npm run build",
     "prepare": "npm run build"
   },
@@ -24,10 +25,17 @@
   },
   "keywords": [
     "security",
+    "scanner",
     "saas",
+    "vibe-coding",
+    "secrets-detection",
     "owasp",
     "headers",
     "csp",
+    "seo",
+    "accessibility",
+    "a11y",
+    "broken-links",
     "idor",
     "multi-tenant",
     "ci"

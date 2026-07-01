@@ -1,4 +1,4 @@
-# Reusable dependency audit — checks out the CALLER's repo, installs deps, runs `security-kit audit`.
+# Reusable dependency audit — checks out the CALLER's repo, installs deps, runs `anal-probe audit`.
 #
 #   jobs:
 #     deps:
@@ -25,7 +25,7 @@ jobs:
         with:
           node-version: ${{ inputs.node_version }}
       - run: npm ci || npm install
-      - name: security-kit audit
+      - name: anal-probe audit
         shell: bash
         run: |
           ARGS=(audit --level "${{ inputs.level }}")
