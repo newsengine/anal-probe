@@ -7,6 +7,7 @@ import type { Category, Finding, ScanContext, ScanOptions, Severity } from './ty
 import {
   securityChecks, secretChecks, exposureChecks, reliabilityChecks, seoChecks, a11yChecks, performanceChecks,
 } from './checks.js';
+import { dnsChecks } from './dns.js';
 
 export type { Category, Finding, ScanContext, ScanOptions, Severity };
 // Back-compat alias: ProbeOptions was the old name.
@@ -16,6 +17,7 @@ const RUNNERS: Record<Category, (ctx: ScanContext) => Promise<Finding[]>> = {
   security: securityChecks,
   secrets: secretChecks,
   exposure: exposureChecks,
+  dns: dnsChecks,
   reliability: reliabilityChecks,
   seo: seoChecks,
   a11y: a11yChecks,

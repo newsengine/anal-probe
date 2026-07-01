@@ -5,5 +5,6 @@ export { scanSecrets, SECRET_RULES, } from './core.js';
 export { idorProbe, checkSecurityHeaders, checkCookieFlags, } from './testkit.js';
 export { runNpmAudit, failsAtLevel, } from './audit.js';
 export { lintCsp } from './checks.js';
+export { dnsChecks, gatherDns, evaluateDnsHygiene, apexOf, } from './dns.js';
 export { toSarif } from './sarif.js';
 export { findingKey, buildBaseline, applyBaseline, } from './baseline.js';

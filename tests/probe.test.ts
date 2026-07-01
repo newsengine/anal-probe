@@ -10,6 +10,7 @@ import { failsAtLevel } from '../dist/audit.js';
 import { lintCsp } from '../dist/checks.js';
 import { toSarif } from '../dist/sarif.js';
 import { buildBaseline, applyBaseline } from '../dist/baseline.js';
+import { evaluateDnsHygiene, apexOf } from '../dist/dns.js';
 
 function server(handler: http.RequestListener): Promise<{ url: string; close: () => void }> {
   return new Promise((resolve) => {
@@ -162,6 +163,39 @@ test('baseline: buildBaseline records failing keys; applyBaseline splits new vs 
   const diff = applyBaseline(later, baseline);
   assert.deepEqual(diff.newFailures.map((f: any) => f.id), ['sri'], 'sri is new');
   assert.deepEqual(diff.baselined.map((f: any) => f.id), ['header.hsts'], 'hsts is accepted');
+});
+
+// ── DNS / email hygiene (#6) ─────────────────────────────────────────────────
+test('apexOf reduces subdomains to the registrable apex', () => {
+  assert.equal(apexOf('beta.example.com'), 'example.com');
+  assert.equal(apexOf('example.com'), 'example.com');
+  assert.equal(apexOf('a.b.c.example.com'), 'example.com');
+});
+
+test('evaluateDnsHygiene: flags a bare domain, passes a hardened one', () => {
+  const bare = evaluateDnsHygiene({ hostname: 'x.com', apex: 'x.com', apexTxt: [], dmarcTxt: [], hasCaa: false, danglingCnameTarget: null });
+  const byId = (id: string) => bare.find((f: any) => f.id === id);
+  assert.ok(byId('dns.spf') && !byId('dns.spf').pass, 'no SPF fails');
+  assert.ok(byId('dns.dmarc') && !byId('dns.dmarc').pass, 'no DMARC fails');
+  assert.ok(byId('dns.caa') && !byId('dns.caa').pass, 'no CAA fails');
+
+  const hard = evaluateDnsHygiene({
+    hostname: 'x.com', apex: 'x.com',
+    apexTxt: ['v=spf1 include:_spf.google.com -all'],
+    dmarcTxt: ['v=DMARC1; p=reject; rua=mailto:a@x.com'],
+    hasCaa: true, danglingCnameTarget: null,
+  });
+  assert.ok(hard.every((f: any) => f.pass), 'a fully hardened domain has no failures');
+});
+
+test('evaluateDnsHygiene: p=none is a weak (failing) DMARC; dangling CNAME is high', () => {
+  const weakDmarc = evaluateDnsHygiene({ hostname: 'x.com', apex: 'x.com', apexTxt: ['v=spf1 -all'], dmarcTxt: ['v=DMARC1; p=none'], hasCaa: true, danglingCnameTarget: null });
+  const d = weakDmarc.find((f: any) => f.id === 'dns.dmarc');
+  assert.ok(d && !d.pass && d.severity === 'low', 'p=none is a low-severity fail');
+
+  const dangling = evaluateDnsHygiene({ hostname: 'gone.x.com', apex: 'x.com', apexTxt: ['v=spf1 -all'], dmarcTxt: ['v=DMARC1; p=reject'], hasCaa: true, danglingCnameTarget: 'old-app.herokudns.com' });
+  const c = dangling.find((f: any) => f.id === 'dns.dangling-cname');
+  assert.ok(c && !c.pass && c.severity === 'high', 'dangling CNAME is a high-severity takeover risk');
 });
 
 // ── secrets ────────────────────────────────────────────────────────────────

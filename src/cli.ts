@@ -40,7 +40,7 @@ const list = (v?: string) => (v ? (v.split(',').map((s) => s.trim()).filter(Bool
 const SEV_ICON: Record<Severity, string> = { high: '🟥', medium: '🟧', low: '🟨', info: 'ℹ️ ' };
 const CAT_TITLE: Record<Category, string> = {
   security: '🔐 Security', secrets: '🔑 Leaked secrets', exposure: '📂 Exposed files & debug',
-  reliability: '🔗 Reliability', seo: '🔎 SEO', a11y: '♿ Accessibility', performance: '⚡ Performance',
+  dns: '🌐 DNS & email', reliability: '🔗 Reliability', seo: '🔎 SEO', a11y: '♿ Accessibility', performance: '⚡ Performance',
 };
 
 async function runAudit() {

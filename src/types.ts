@@ -9,6 +9,7 @@ export type Category =
   | 'security'     // headers, TLS, CORS, cookies
   | 'secrets'      // API keys / private keys / source leaked to the browser
   | 'exposure'     // .env / .git / config / debug endpoints reachable
+  | 'dns'          // SPF/DMARC email hygiene, CAA, dangling-CNAME takeover
   | 'reliability'  // broken links/images, 500s, stack-trace leaks, mixed content
   | 'seo'          // title/description/canonical/robots/sitemap
   | 'a11y'         // lang, alt text, labels, viewport

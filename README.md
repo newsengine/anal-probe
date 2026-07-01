@@ -11,7 +11,7 @@ npx github:newsengine/anal-probe https://your-app.example.com
 Built for vibe coders shipping with AI: you don't need to know what to look for — the scanner does, and
 every failing finding comes with a one-line **fix**. Exits non-zero so it doubles as a CI gate.
 
-- **Full black-box scan** — 7 categories (below), all from a URL.
+- **Full black-box scan** — 8 categories (below), all from a URL.
 - **White-box helpers** (`idorProbe`, `checkSecurityHeaders`, `checkCookieFlags`, `scanSecrets`): import
   into your own test suite (jest/vitest/node:test) for cross-tenant/IDOR + header/cookie/secret assertions.
 - **Templates**: `SECURITY.md`, `security.txt`, `CODEOWNERS`.
@@ -33,6 +33,11 @@ Also flags **publicly downloadable source maps** (your unminified source). Secre
 `/docker-compose.yml`, `/.DS_Store`, `/backup.sql`, `package.json`. Each one **validates the body**
 (not just a 200) so SPA catch-all routes don't false-positive. Plus: **stack-trace/internal-path leakage**
 on error pages, and **GraphQL introspection** left enabled.
+
+### 🌐 `dns` — email spoofing & subdomain takeover
+**SPF** + **DMARC** (with policy strength — `p=none` is only monitoring), **CAA** (restricts who can
+issue TLS certs for you), and a **dangling-CNAME → subdomain-takeover** heuristic (a CNAME pointing at
+a target that no longer resolves). All from the hostname, via DNS lookups.
 
 ### 🔗 `reliability` — is it actually working?
 Homepage status, **broken same-origin links & images** (sampled HEAD/GET), and **mixed content**
@@ -72,9 +77,9 @@ anal-probe audit --level high          # fail on any high/critical advisory (def
 anal-probe audit --prod --level moderate --json
 ```
 
-> Roadmap (PRs welcome): deeper **TLS** (protocol/cipher grading, HSTS-preload eligibility),
-> **DNS/email hygiene** (SPF/DMARC, dangling-CNAME takeover), and an **authenticated crawl**
-> beyond the entry bundle. (SARIF output, baseline/diff mode, and CSP linting have shipped.)
+> Roadmap (PRs welcome): deeper **TLS** (protocol/cipher grading, HSTS-preload eligibility) and an
+> **authenticated crawl** beyond the entry bundle. (SARIF output, baseline/diff mode, CSP linting, and
+> DNS/email hygiene have shipped.)
 
 ## Use it in CI across all repos (recommended)
 ```yaml
@@ -127,7 +132,7 @@ node .kit/dist/cli.js https://your-deploy.example.com --baseline probe-baseline.
 
 ## Use the CLI locally / ad-hoc
 ```bash
-# full scan (all 7 categories)
+# full scan (all 8 categories)
 npx github:newsengine/anal-probe https://app.example.com
 
 # scope it, gate harder, test CORS, machine-readable output

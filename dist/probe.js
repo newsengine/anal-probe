@@ -3,10 +3,12 @@
 // against that shared context. `probe()` runs all categories by default (it used to be security-only);
 // pass `only`/`skip` to scope it. The result is a flat Finding[] the CLI groups + gates on.
 import { securityChecks, secretChecks, exposureChecks, reliabilityChecks, seoChecks, a11yChecks, performanceChecks, } from './checks.js';
+import { dnsChecks } from './dns.js';
 const RUNNERS = {
     security: securityChecks,
     secrets: secretChecks,
     exposure: exposureChecks,
+    dns: dnsChecks,
     reliability: reliabilityChecks,
     seo: seoChecks,
     a11y: a11yChecks,

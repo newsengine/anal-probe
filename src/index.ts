@@ -17,6 +17,10 @@ export {
   runNpmAudit, failsAtLevel, type AuditResult,
 } from './audit.js';
 export { lintCsp, type CspIssue } from './checks.js';
+export {
+  dnsChecks, gatherDns, evaluateDnsHygiene, apexOf,
+  type DnsRecords,
+} from './dns.js';
 export { toSarif, type SarifOptions } from './sarif.js';
 export {
   findingKey, buildBaseline, applyBaseline,

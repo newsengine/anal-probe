@@ -40,7 +40,7 @@ const list = (v) => (v ? v.split(',').map((s) => s.trim()).filter(Boolean) : und
 const SEV_ICON = { high: '🟥', medium: '🟧', low: '🟨', info: 'ℹ️ ' };
 const CAT_TITLE = {
     security: '🔐 Security', secrets: '🔑 Leaked secrets', exposure: '📂 Exposed files & debug',
-    reliability: '🔗 Reliability', seo: '🔎 SEO', a11y: '♿ Accessibility', performance: '⚡ Performance',
+    dns: '🌐 DNS & email', reliability: '🔗 Reliability', seo: '🔎 SEO', a11y: '♿ Accessibility', performance: '⚡ Performance',
 };
 async function runAudit() {
     const level = arg('--level') || 'high';
