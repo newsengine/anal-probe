@@ -19,7 +19,7 @@
 // Subcommand:
 //   anal-probe audit [--prod] [--level low|moderate|high|critical] [--json]   # npm audit gate
 import { readFileSync, writeFileSync } from 'node:fs';
-import { probe, summarize, ALL_CATEGORIES } from './probe.js';
+import { probe, summarize, normalizeUrl, ALL_CATEGORIES } from './probe.js';
 import { runNpmAudit, failsAtLevel } from './audit.js';
 import { toSarif } from './sarif.js';
 import { buildBaseline, applyBaseline } from './baseline.js';
@@ -62,18 +62,39 @@ async function runAudit() {
 async function main() {
     if (process.argv[2] === 'audit')
         return runAudit();
-    const url = process.argv[2];
-    if (!url || url.startsWith('-')) {
-        console.error('usage:\n  npx github:newsengine/anal-probe <url> [--only ...] [--skip ...] [--cors-path <p>] [--rate-limit-path <p>] [--fail-on high|medium|any] [--json]\n  npx github:newsengine/anal-probe audit [--prod] [--level low|moderate|high|critical] [--json]');
+    const rawUrl = process.argv[2];
+    if (!rawUrl || rawUrl.startsWith('-')) {
+        console.error('usage:\n  npx github:newsengine/anal-probe <url> [--only ...] [--skip ...] [--cors-path <p>] [--rate-limit-path <p>] [--timeout <ms>] [--fail-on high|medium|any] [--json] [--quiet]\n  npx github:newsengine/anal-probe audit [--prod] [--level low|moderate|high|critical] [--json]');
         process.exit(2);
     }
+    const url = normalizeUrl(rawUrl); // accept bare domains (example.com -> https://example.com)
+    try {
+        new URL(url);
+    }
+    catch {
+        console.error(`invalid URL: ${rawUrl}`);
+        process.exit(2);
+    }
+    // Parse numeric flags defensively so a typo can't silently become NaN and disable the cap/timeout.
+    const num = (name, dflt) => {
+        const raw = arg(name);
+        if (raw === undefined)
+            return dflt;
+        const n = Number(raw);
+        if (!Number.isFinite(n) || n <= 0) {
+            console.error(`${name} must be a positive number (got "${raw}")`);
+            process.exit(2);
+        }
+        return n;
+    };
     const findings = await probe(url, {
         only: list(arg('--only')),
         skip: list(arg('--skip')),
         corsTestPath: arg('--cors-path'),
         rateLimitPath: arg('--rate-limit-path'),
         allowReportOnlyCsp: flag('--allow-report-only-csp'),
-        maxCrawl: arg('--max-crawl') ? Number(arg('--max-crawl')) : undefined,
+        maxCrawl: arg('--max-crawl') ? num('--max-crawl', 25) : undefined,
+        timeoutMs: arg('--timeout') ? num('--timeout', 10_000) : undefined,
     });
     const sum = summarize(findings);
     // --write-baseline: snapshot today's failing findings and exit 0 (nothing to gate on the first run).
@@ -108,14 +129,20 @@ async function main() {
         console.log(JSON.stringify({ url, summary: sum, findings, ...(diff ? { baseline: { new: diff.newFailures.length, accepted: diff.baselined.length } } : {}) }, null, 2));
     }
     else {
+        // --quiet: show only failures (good for CI logs); default shows passes too so a clean scan is visible.
+        const quiet = flag('--quiet');
         console.log(`\n🔬 anal-probe — full app scan of ${url}\n`);
         for (const cat of ALL_CATEGORIES) {
             const group = findings.filter((f) => f.category === cat);
             if (!group.length)
                 continue;
             const failed = group.filter((g) => !g.pass).length;
+            if (quiet && !failed)
+                continue;
             console.log(`${CAT_TITLE[cat]}  ${failed ? `— ${failed} issue(s)` : '— ok'}`);
             for (const f of group) {
+                if (quiet && f.pass)
+                    continue;
                 const mark = f.pass ? '  ✅' : `  ${SEV_ICON[f.severity]}`;
                 console.log(`${mark} [${f.severity.toUpperCase()}] ${f.title}`);
                 console.log(`        ${f.detail}`);

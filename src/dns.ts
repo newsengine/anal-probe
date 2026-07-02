@@ -9,11 +9,26 @@ import type { Finding, ScanContext, Severity } from './types.js';
 const f = (id: string, title: string, severity: Severity, pass: boolean, detail: string, fix?: string): Finding =>
   ({ category: 'dns', id, title, severity, pass, detail, fix });
 
-/** Best-effort registrable apex: last two labels. Good for `sub.example.com`; imperfect for multi-part
- *  public suffixes (`example.co.uk`) — acceptable for a zero-dep black-box check. */
+// Common multi-label public suffixes. Not the full Public Suffix List (that would need a bundled data
+// file / network fetch, breaking the zero-dep promise) but it covers the suffixes real users actually
+// deploy under — crucially the AU set, so `agentaus.com.au` resolves to the right apex instead of `com.au`.
+const MULTI_LABEL_SUFFIXES = new Set([
+  'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au', 'asn.au', 'id.au',
+  'co.uk', 'org.uk', 'me.uk', 'ac.uk', 'gov.uk',
+  'co.nz', 'net.nz', 'org.nz', 'govt.nz', 'ac.nz',
+  'co.jp', 'or.jp', 'ne.jp', 'ac.jp', 'go.jp',
+  'com.br', 'com.cn', 'com.mx', 'com.tr', 'com.sg', 'com.hk', 'com.tw',
+  'co.in', 'co.za', 'co.il', 'co.kr', 'com.ar',
+]);
+
+/** Registrable apex ("eTLD+1"). Handles common multi-label suffixes (`example.com.au` → itself, not
+ *  `com.au`) via a curated suffix set, falling back to the last two labels for ordinary TLDs. */
 export function apexOf(hostname: string): string {
   const parts = hostname.split('.').filter(Boolean);
-  return parts.length <= 2 ? hostname : parts.slice(-2).join('.');
+  if (parts.length <= 2) return hostname;
+  const lastTwo = parts.slice(-2).join('.');
+  if (MULTI_LABEL_SUFFIXES.has(lastTwo)) return parts.slice(-3).join('.');
+  return lastTwo;
 }
 
 export interface DnsRecords {

@@ -41,6 +41,8 @@ export interface ScanOptions {
   skip?: Category[];
   /** Max same-origin links/images/scripts to fetch when checking for breakage (default 25). */
   maxCrawl?: number;
+  /** Per-request network timeout in ms (default 10000). Guards against sites that never respond. */
+  timeoutMs?: number;
 }
 
 /** Shared, fetched-once context handed to every check so we hit the homepage a single time. */

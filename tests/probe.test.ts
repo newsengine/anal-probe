@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { probe, summarize } from '../dist/probe.js';
+import { probe, summarize, normalizeUrl } from '../dist/probe.js';
 import { scanSecrets, html as H } from '../dist/core.js';
 import { checkSecurityHeaders, checkCookieFlags, idorProbe } from '../dist/testkit.js';
 import { failsAtLevel } from '../dist/audit.js';
@@ -291,4 +291,126 @@ test('idorProbe reports a cross-tenant leak', async () => {
   );
   leaky.close();
   assert.equal(res[0].ok, false, 'a 200 to the attacker is a leak');
+});
+
+// ═══════════════════════ audit fixes (2026-07-02) ═══════════════════════════
+
+// [DNS apex] multi-label public suffixes — the .com.au bug found live on agentaus.com.au.
+test('apexOf handles multi-label public suffixes (.com.au / .co.uk / .co.nz)', () => {
+  assert.equal(apexOf('agentaus.com.au'), 'agentaus.com.au', 'AU domain apex is the registrable name, not com.au');
+  assert.equal(apexOf('www.agentaus.com.au'), 'agentaus.com.au');
+  assert.equal(apexOf('shop.example.co.uk'), 'example.co.uk');
+  assert.equal(apexOf('foo.bar.example.co.nz'), 'example.co.nz');
+  assert.equal(apexOf('plain.example.com'), 'example.com', 'ordinary TLDs still use last two labels');
+});
+
+// [correctness #1] open redirect via an UPPERCASE protocol-relative location.
+test('open-redirect: catches a protocol-relative redirect regardless of case', async () => {
+  const srv = await server((req, res) => {
+    const u = new URL(req.url || '/', 'http://x');
+    const p = u.searchParams.get('next');
+    if (p) { res.writeHead(302, { location: '//EVIL.EXAMPLE/' }); res.end(); return; }
+    res.writeHead(200, { 'content-type': 'text/html' }); res.end('<html>ok</html>');
+  });
+  const findings = await probe(srv.url, { only: ['security'] });
+  srv.close();
+  assert.ok(findings.find((f) => f.id === 'open-redirect' && !f.pass), 'flags //EVIL.EXAMPLE despite uppercase');
+});
+
+// [correctness #2] .env with lowercase variable names (Flask/Django style).
+test('exposure flags a .env that uses lowercase variable names', async () => {
+  const srv = await server((req, res) => {
+    if (req.url === '/.env') { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('debug_mode=true\ndatabase_url=postgres://u:p@h/db\n'); return; }
+    res.writeHead(404); res.end('nope');
+  });
+  const findings = await probe(srv.url, { only: ['exposure'] });
+  srv.close();
+  assert.ok(findings.find((f) => f.id === 'exposed/.env' && !f.pass), 'lowercase-keyed .env is still detected');
+});
+
+// [correctness #15] object-src falls back to default-src 'none'.
+test('lintCsp: object-src inherits default-src \'none\' (no false object-src warning)', () => {
+  const issues = lintCsp("default-src 'none'; script-src 'self' 'nonce-x'; base-uri 'self'");
+  assert.ok(!issues.some((i) => i.id === 'csp.object-src'), "default-src 'none' covers object-src");
+  const missing = lintCsp("default-src 'self'; script-src 'self' 'nonce-x'; base-uri 'self'");
+  assert.ok(missing.some((i) => i.id === 'csp.object-src'), "default-src 'self' does NOT cover object-src");
+});
+
+// [coverage #16/#20/#22] modern hardening headers.
+test('security: flags missing Permissions-Policy, COOP, and non-preloadable HSTS', async () => {
+  const srv = await server((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html', 'strict-transport-security': 'max-age=600' });
+    res.end('<html>ok</html>');
+  });
+  const findings = await probe(srv.url, { only: ['security'] });
+  srv.close();
+  assert.ok(findings.find((f) => f.id === 'header.permissions-policy' && !f.pass), 'flags missing Permissions-Policy');
+  assert.ok(findings.find((f) => f.id === 'header.cross-origin-opener-policy' && !f.pass), 'flags missing COOP');
+  assert.ok(findings.find((f) => f.id === 'tls.hsts-preload' && !f.pass), 'short HSTS is not preload-eligible');
+});
+
+test('security: HSTS preload-eligible header passes', async () => {
+  const srv = await server((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html', 'strict-transport-security': 'max-age=31536000; includeSubDomains; preload' });
+    res.end('<html>ok</html>');
+  });
+  const findings = await probe(srv.url, { only: ['security'] });
+  srv.close();
+  assert.ok(findings.find((f) => f.id === 'tls.hsts-preload' && f.pass), 'full HSTS is preload-eligible');
+});
+
+// [coverage #3] framework debug/admin endpoint exposure.
+test('exposure flags a Spring Boot actuator health endpoint', async () => {
+  const srv = await server((req, res) => {
+    if (req.url === '/actuator/health') { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"status":"UP","components":{"db":{"status":"UP"}}}'); return; }
+    res.writeHead(404); res.end('nope');
+  });
+  const findings = await probe(srv.url, { only: ['exposure'] });
+  srv.close();
+  assert.ok(findings.find((f) => f.id === 'exposed/actuator/health' && !f.pass), 'detects exposed actuator');
+});
+
+// [coverage #4] directory listing detection + SPA guard.
+test('exposure flags a real directory listing but not an SPA catch-all', async () => {
+  const listing = await server((req, res) => {
+    if (req.url?.startsWith('/uploads/')) { res.writeHead(200, { 'content-type': 'text/html' }); res.end('<html><head><title>Index of /uploads</title></head><body><pre><a href="../">Parent Directory</a>\n<a href="a.jpg">a.jpg</a></pre></body></html>'); return; }
+    res.writeHead(404); res.end('nope');
+  });
+  const a = await probe(listing.url, { only: ['exposure'] }); listing.close();
+  assert.ok(a.find((f) => f.id === 'dir-listing/uploads/' && !f.pass), 'flags an autoindex page');
+
+  const spa = await server((_req, res) => { res.writeHead(200, { 'content-type': 'text/html' }); res.end('<!DOCTYPE html><html><body><div id="root"></div><script src="/app.js"></script></body></html>'); });
+  const b = await probe(spa.url, { only: ['exposure'] }); spa.close();
+  assert.ok(!b.some((f) => f.id.startsWith('dir-listing') && !f.pass), 'SPA index is not a directory listing');
+});
+
+// [coverage #11/#21] robots.txt disclosing sensitive paths.
+test('exposure flags robots.txt that Disallows sensitive paths', async () => {
+  const srv = await server((req, res) => {
+    if (req.url === '/robots.txt') { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('User-agent: *\nDisallow: /admin/\nDisallow: /internal-backup/\nDisallow: /public/\n'); return; }
+    res.writeHead(404); res.end('nope');
+  });
+  const findings = await probe(srv.url, { only: ['exposure'] });
+  srv.close();
+  const finding = findings.find((f) => f.id === 'robots.sensitive');
+  assert.ok(finding && !finding.pass, 'flags admin/backup Disallow entries');
+});
+
+// [robustness #7/#14] bare-domain normalization.
+test('normalizeUrl adds https:// to a bare domain and leaves full URLs alone', () => {
+  assert.equal(normalizeUrl('example.com'), 'https://example.com');
+  assert.equal(normalizeUrl('example.com/path'), 'https://example.com/path');
+  assert.equal(normalizeUrl('http://example.com'), 'http://example.com');
+  assert.equal(normalizeUrl('https://example.com'), 'https://example.com');
+});
+
+// [robustness #5/#6] a site that accepts the connection but never responds must not hang the scan.
+test('probe returns (does not hang) against a non-responsive server within the timeout', async () => {
+  const hanging = await server(() => { /* never write a response */ });
+  const start = Date.now();
+  const findings = await probe(hanging.url, { only: ['security'], timeoutMs: 400 });
+  const elapsed = Date.now() - start;
+  hanging.close();
+  assert.ok(elapsed < 8000, `scan should abort quickly, took ${elapsed}ms`);
+  assert.ok(findings.find((f) => f.id === 'reachability' && !f.pass), 'reports the site as unreachable');
 });

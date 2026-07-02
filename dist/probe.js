@@ -15,13 +15,21 @@ const RUNNERS = {
     performance: performanceChecks,
 };
 export const ALL_CATEGORIES = Object.keys(RUNNERS);
+/** Add https:// when the user typed a bare domain, so `anal-probe example.com` just works. */
+export function normalizeUrl(input) {
+    return /^[a-z][a-z0-9+.-]*:\/\//i.test(input) ? input : `https://${input}`;
+}
 async function buildContext(baseUrl, opts) {
     const url = new URL(baseUrl);
     let res = null;
     let html = '';
     let headers = new Headers();
+    // The homepage fetch is the one call not going through safeFetch, so it needs its own hard timeout —
+    // otherwise a site that accepts the connection but never responds would hang the entire scan.
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? 10_000);
     try {
-        res = await fetch(url.origin, { redirect: 'follow' });
+        res = await fetch(url.origin, { redirect: 'follow', signal: ac.signal });
         headers = res.headers;
         if ((res.headers.get('content-type') || '').includes('html')) {
             html = (await res.text()).slice(0, 5_000_000);
@@ -29,6 +37,9 @@ async function buildContext(baseUrl, opts) {
     }
     catch {
         res = null;
+    }
+    finally {
+        clearTimeout(timer);
     }
     return { baseUrl, origin: url.origin, url, res, html, headers, opts };
 }

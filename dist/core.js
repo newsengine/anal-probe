@@ -30,22 +30,54 @@ export function tlsCertDaysRemaining(host, port = 443) {
         }
     });
 }
-export async function safeFetch(url, init) {
+// Every network call gets a hard deadline so a dead/slow/hostile site can't hang the scan forever.
+export const DEFAULT_TIMEOUT_MS = 10_000;
+/** fetch() with an AbortController timeout. Merges any caller-supplied signal-less init. */
+async function fetchWithTimeout(url, init, timeoutMs) {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), timeoutMs);
     try {
-        return await fetch(url, { redirect: 'manual', ...init });
+        return await fetch(url, { signal: ac.signal, ...init });
+    }
+    finally {
+        clearTimeout(timer);
+    }
+}
+export async function safeFetch(url, init, timeoutMs = DEFAULT_TIMEOUT_MS) {
+    try {
+        return await fetchWithTimeout(url, { redirect: 'manual', ...init }, timeoutMs);
     }
     catch {
         return null;
     }
 }
-/** Fetch text with a cap so a giant bundle can't blow up memory. Returns '' on any failure. */
-export async function fetchText(url, init, maxBytes = 3_000_000) {
+/**
+ * Fetch text with a hard timeout AND a streaming byte cap: we stop reading once maxBytes have arrived,
+ * so a gzip bomb / endless stream can't OOM the process (arrayBuffer() would buffer the whole body first).
+ * Returns '' on any failure. Binary responses are decoded lossily — callers only regex over them.
+ */
+export async function fetchText(url, init, maxBytes = 3_000_000, timeoutMs = DEFAULT_TIMEOUT_MS) {
     try {
-        const res = await fetch(url, { redirect: 'follow', ...init });
+        const res = await fetchWithTimeout(url, { redirect: 'follow', ...init }, timeoutMs);
         if (!res.ok || !res.body)
             return '';
-        const buf = await res.arrayBuffer();
-        return new TextDecoder().decode(buf.slice(0, maxBytes));
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder('utf-8', { fatal: false });
+        let out = '';
+        let read = 0;
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done)
+                break;
+            read += value.byteLength;
+            out += decoder.decode(value, { stream: true });
+            if (read >= maxBytes) {
+                await reader.cancel();
+                break;
+            }
+        }
+        out += decoder.decode();
+        return out.length > maxBytes ? out.slice(0, maxBytes) : out;
     }
     catch {
         return '';
