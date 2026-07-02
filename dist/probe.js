@@ -62,6 +62,33 @@ export async function probe(baseUrl, opts = {}) {
 }
 /** Alias — reads better for the full-app use case. */
 export const scan = probe;
+/**
+ * Discover up to `max` additional same-origin pages linked from the homepage — for a bounded multi-page
+ * crawl (`--crawl N`). Returns absolute URLs (excluding the homepage itself). Best-effort; [] on failure.
+ */
+export async function discoverPages(baseUrl, max, opts = {}) {
+    const { safeFetch, html: H, resolveUrl, sameOrigin } = await import('./core.js');
+    const url = new URL(baseUrl);
+    const res = await safeFetch(url.origin, { redirect: 'follow', headers: opts.extraHeaders }, opts.timeoutMs);
+    if (!res || !res.ok)
+        return [];
+    const body = (await res.text()).slice(0, 5_000_000);
+    const seen = new Set([url.origin, url.origin + '/']);
+    const pages = [];
+    for (const href of H.links(body)) {
+        const abs = resolveUrl(url.origin, href);
+        if (!abs || !sameOrigin(abs, url.origin))
+            continue;
+        const norm = abs.split('#')[0];
+        if (seen.has(norm))
+            continue;
+        seen.add(norm);
+        pages.push(norm);
+        if (pages.length >= max)
+            break;
+    }
+    return pages;
+}
 export function summarize(findings) {
     let passed = 0, failed = 0, failHigh = 0, failMedium = 0, failLow = 0;
     const byCategory = {};

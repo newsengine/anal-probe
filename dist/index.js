@@ -1,5 +1,6 @@
 // Public API for @newsengine/anal-probe.
-export { probe, scan, summarize, ALL_CATEGORIES, } from './probe.js';
+export { probe, scan, summarize, discoverPages, normalizeUrl, ALL_CATEGORIES, } from './probe.js';
+export { loadConfig } from './config.js';
 export { securityChecks, secretChecks, exposureChecks, reliabilityChecks, seoChecks, a11yChecks, performanceChecks, } from './checks.js';
 export { scanSecrets, SECRET_RULES, } from './core.js';
 export { idorProbe, checkSecurityHeaders, checkCookieFlags, setTenantParam, classifyTenantAccess, rbacProbe, dataIsolationProbe, massAssignmentProbe, findSensitiveFields, } from './testkit.js';

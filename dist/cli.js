@@ -19,10 +19,11 @@
 // Subcommand:
 //   anal-probe audit [--prod] [--level low|moderate|high|critical] [--json]   # npm audit gate
 import { readFileSync, writeFileSync } from 'node:fs';
-import { probe, summarize, normalizeUrl, ALL_CATEGORIES } from './probe.js';
+import { probe, summarize, normalizeUrl, discoverPages, ALL_CATEGORIES } from './probe.js';
 import { runNpmAudit, failsAtLevel } from './audit.js';
 import { toSarif } from './sarif.js';
 import { buildBaseline, applyBaseline } from './baseline.js';
+import { loadConfig } from './config.js';
 const VERSION = (() => {
     try {
         return JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
@@ -62,12 +63,51 @@ async function runAudit() {
     }
     process.exit(result.error ? 2 : failsAtLevel(result, level) ? 1 : 0);
 }
+const failGate = (findings, failOn) => {
+    const gate = findings.filter((f) => !f.pass);
+    const h = gate.filter((f) => f.severity === 'high').length;
+    const m = gate.filter((f) => f.severity === 'medium').length;
+    return failOn === 'any' ? gate.length > 0 : failOn === 'medium' ? h + m > 0 : h > 0;
+};
+/** Scan a list of URLs (from --urls or --crawl) and aggregate — combined non-zero exit if any fails. */
+async function runBatch(targets, opts, o) {
+    const rows = [];
+    let anyFail = false;
+    for (const url of targets) {
+        const findings = await probe(url, opts);
+        const failed = failGate(findings, o.failOn);
+        if (failed)
+            anyFail = true;
+        rows.push({ url, summary: summarize(findings), failed, findings });
+    }
+    if (o.json) {
+        console.log(JSON.stringify(rows.map((r) => ({ url: r.url, summary: r.summary, failed: r.failed })), null, 2));
+    }
+    else {
+        console.log(`\n🔬 anal-probe — scanned ${targets.length} URL(s)\n`);
+        for (const r of rows) {
+            const s = r.summary;
+            console.log(`${r.failed ? '🟥' : '✅'} ${r.url} — ${s.passed} passed, ${s.failed} failed  (🟥 ${s.failHigh} · 🟧 ${s.failMedium} · 🟨 ${s.failLow})`);
+            if (!o.quiet)
+                for (const f of r.findings.filter((x) => !x.pass))
+                    console.log(`     ${SEV_ICON[f.severity]} [${f.category}] ${f.title}`);
+        }
+        console.log('');
+    }
+    process.exit(anyFail ? 1 : 0);
+}
 async function main() {
     if (process.argv[2] === 'audit')
         return runAudit();
+    const cfgResult = loadConfig(arg('--config'));
+    if (cfgResult.error) {
+        console.error(cfgResult.error);
+        process.exit(2);
+    }
+    const config = cfgResult.config;
     const rawUrl = process.argv[2];
     if (!rawUrl || rawUrl.startsWith('-')) {
-        console.error('usage:\n  npx github:newsengine/anal-probe <url> [--only ...] [--skip ...] [--cors-path <p>] [--rate-limit-path <p>] [--timeout <ms>] [--cookie "<raw cookie>"] [--header "K: V"] [--fail-on high|medium|any] [--json] [--quiet]\n  npx github:newsengine/anal-probe audit [--prod] [--level low|moderate|high|critical] [--json]');
+        console.error('usage:\n  npx github:newsengine/anal-probe <url> [--only ...] [--skip ...] [--cors-path <p>] [--rate-limit-path <p>] [--timeout <ms>] [--cookie "<raw cookie>"] [--header "K: V"] [--crawl <N>] [--urls <file>] [--config <file>] [--fail-on high|medium|any] [--json] [--quiet]\n  npx github:newsengine/anal-probe audit [--prod] [--level low|moderate|high|critical] [--json]');
         process.exit(2);
     }
     const url = normalizeUrl(rawUrl); // accept bare domains (example.com -> https://example.com)
@@ -109,16 +149,41 @@ async function main() {
         }
     }
     const hasAuth = Object.keys(extraHeaders).length > 0;
-    const findings = await probe(url, {
-        only: list(arg('--only')),
-        skip: list(arg('--skip')),
-        corsTestPath: arg('--cors-path'),
-        rateLimitPath: arg('--rate-limit-path'),
-        allowReportOnlyCsp: flag('--allow-report-only-csp'),
-        maxCrawl: arg('--max-crawl') ? num('--max-crawl', 25) : undefined,
-        timeoutMs: arg('--timeout') ? num('--timeout', 10_000) : undefined,
+    // Options: CLI flags win, else fall back to .analproberc.json.
+    const opts = {
+        only: list(arg('--only')) ?? config.only,
+        skip: list(arg('--skip')) ?? config.skip,
+        corsTestPath: arg('--cors-path') ?? config.corsPath,
+        rateLimitPath: arg('--rate-limit-path') ?? config.rateLimitPath,
+        allowReportOnlyCsp: flag('--allow-report-only-csp') || !!config.allowReportOnlyCsp,
+        maxCrawl: arg('--max-crawl') ? num('--max-crawl', 25) : config.maxCrawl,
+        timeoutMs: arg('--timeout') ? num('--timeout', 10_000) : config.timeoutMs,
         extraHeaders: hasAuth ? extraHeaders : undefined,
-    });
+    };
+    const failOn = (arg('--fail-on') ?? config.failOn ?? 'high');
+    const quiet = flag('--quiet') || !!config.quiet;
+    // Batch mode: --urls <file> (one URL per line) or --crawl <N> (homepage + N same-origin pages).
+    const urlsFile = arg('--urls');
+    const crawlN = arg('--crawl') ? num('--crawl', 0) : config.crawl;
+    if (urlsFile || crawlN) {
+        let targets;
+        if (urlsFile) {
+            try {
+                targets = readFileSync(urlsFile, 'utf8').split(/\r?\n/).map((s) => s.trim()).filter(Boolean).map(normalizeUrl);
+            }
+            catch (e) {
+                console.error(`could not read --urls ${urlsFile}: ${String(e?.message || e)}`);
+                process.exit(2);
+                return;
+            }
+        }
+        else {
+            targets = [url, ...await discoverPages(url, crawlN, opts)];
+        }
+        if (targets.length > 1)
+            return runBatch(targets, opts, { failOn, quiet, json: flag('--json') });
+    }
+    const findings = await probe(url, opts);
     const sum = summarize(findings);
     // --write-baseline: snapshot today's failing findings and exit 0 (nothing to gate on the first run).
     const writeBaselinePath = arg('--write-baseline');
@@ -153,7 +218,6 @@ async function main() {
     }
     else {
         // --quiet: show only failures (good for CI logs); default shows passes too so a clean scan is visible.
-        const quiet = flag('--quiet');
         console.log(`\n🔬 anal-probe — full app scan of ${url}${hasAuth ? ' (authenticated)' : ''}\n`);
         for (const cat of ALL_CATEGORIES) {
             const group = findings.filter((f) => f.category === cat);
@@ -179,7 +243,6 @@ async function main() {
             console.log(`baseline: ${diff.newFailures.length} new · ${diff.baselined.length} accepted`);
         console.log('');
     }
-    const failOn = (arg('--fail-on') || 'high');
     const gHigh = gateFails.filter((f) => f.severity === 'high').length;
     const gMed = gateFails.filter((f) => f.severity === 'medium').length;
     const shouldFail = failOn === 'any' ? gateFails.length > 0 :

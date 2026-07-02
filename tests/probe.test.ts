@@ -3,7 +3,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { probe, summarize, normalizeUrl } from '../dist/probe.js';
+import { probe, summarize, normalizeUrl, discoverPages } from '../dist/probe.js';
+import { loadConfig } from '../dist/config.js';
+import { writeFileSync, rmSync } from 'node:fs';
 import { scanSecrets, html as H } from '../dist/core.js';
 import { checkSecurityHeaders, checkCookieFlags, idorProbe, setTenantParam, classifyTenantAccess, rbacProbe, dataIsolationProbe, massAssignmentProbe, findSensitiveFields } from '../dist/testkit.js';
 import { failsAtLevel } from '../dist/audit.js';
@@ -583,6 +585,34 @@ test('findSensitiveFields spots secret keys in a response body', () => {
   assert.deepEqual(findSensitiveFields('{"user":"x","access_token":"ey..."}').sort(), ['access_token']);
   assert.ok(findSensitiveFields('{"password_hash":"$2b$10$...","role":"admin"}').includes('password_hash'));
   assert.deepEqual(findSensitiveFields('{"id":1,"name":"ok"}'), [], 'clean body has none');
+});
+
+// ═══════════════════════ multi-page crawl (#12) + config (#13) ══════════════
+
+test('discoverPages returns capped same-origin pages, ignoring off-origin + fragments', async () => {
+  const srv = await server((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end('<html><body><a href="/a">a</a><a href="/b">b</a><a href="/c">c</a><a href="https://evil.example/x">ext</a><a href="/a#frag">dup</a></body></html>');
+  });
+  const pages = await discoverPages(srv.url, 2);
+  srv.close();
+  assert.equal(pages.length, 2, 'respects the cap');
+  assert.ok(pages.every((p) => p.startsWith(srv.url)), 'same-origin only');
+  assert.ok(!pages.some((p) => p.includes('evil.example')), 'excludes off-origin links');
+});
+
+test('loadConfig reads a file, tolerates a missing default', () => {
+  const path = '/tmp/anal-probe-test-config.json';
+  writeFileSync(path, JSON.stringify({ failOn: 'medium', skip: ['a11y'], quiet: true }));
+  const { config, error } = loadConfig(path);
+  rmSync(path, { force: true });
+  assert.equal(error, undefined);
+  assert.equal(config.failOn, 'medium');
+  assert.deepEqual(config.skip, ['a11y']);
+
+  const missing = loadConfig('/tmp/anal-probe-does-not-exist.json');
+  assert.ok(missing.error, 'an explicit missing path is an error');
+  assert.deepEqual(loadConfig(undefined).config, {}, 'a missing default file is fine (empty config)');
 });
 
 // ═══════════════════════ deeper TLS grading (#5) ════════════════════════════

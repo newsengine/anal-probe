@@ -75,6 +75,30 @@ export async function probe(baseUrl: string, opts: ScanOptions = {}): Promise<Fi
 /** Alias — reads better for the full-app use case. */
 export const scan = probe;
 
+/**
+ * Discover up to `max` additional same-origin pages linked from the homepage — for a bounded multi-page
+ * crawl (`--crawl N`). Returns absolute URLs (excluding the homepage itself). Best-effort; [] on failure.
+ */
+export async function discoverPages(baseUrl: string, max: number, opts: ScanOptions = {}): Promise<string[]> {
+  const { safeFetch, html: H, resolveUrl, sameOrigin } = await import('./core.js');
+  const url = new URL(baseUrl);
+  const res = await safeFetch(url.origin, { redirect: 'follow', headers: opts.extraHeaders }, opts.timeoutMs);
+  if (!res || !res.ok) return [];
+  const body = (await res.text()).slice(0, 5_000_000);
+  const seen = new Set<string>([url.origin, url.origin + '/']);
+  const pages: string[] = [];
+  for (const href of H.links(body)) {
+    const abs = resolveUrl(url.origin, href);
+    if (!abs || !sameOrigin(abs, url.origin)) continue;
+    const norm = abs.split('#')[0];
+    if (seen.has(norm)) continue;
+    seen.add(norm);
+    pages.push(norm);
+    if (pages.length >= max) break;
+  }
+  return pages;
+}
+
 export function summarize(findings: Finding[]): {
   passed: number; failed: number; failHigh: number; failMedium: number; failLow: number;
   byCategory: Record<string, { passed: number; failed: number }>;
