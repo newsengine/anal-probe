@@ -18,6 +18,7 @@ import { detectStacks } from '../dist/detect.js';
 import { gradeTlsProtocol, gradeTlsCipher } from '../dist/core.js';
 import { identifyEdge } from '../dist/host.js';
 import { scanPort, parsePorts, identifyBanner } from '../dist/active.js';
+import { parseNvd } from '../dist/cve.js';
 import net from 'node:net';
 
 function server(handler: http.RequestListener): Promise<{ url: string; close: () => void }> {
@@ -658,6 +659,19 @@ test('parsePorts handles common/all/list/garbage', () => {
   assert.equal(parsePorts('all').length, 65535);
   assert.deepEqual(parsePorts('22,80,443'), [22, 80, 443]);
   assert.deepEqual(parsePorts('bad,99999,-1,0'), [], 'invalid ports are dropped');
+});
+
+test('parseNvd extracts id/severity/summary from an NVD 2.0 response', () => {
+  const sample = { vulnerabilities: [
+    { cve: { id: 'CVE-2016-10009', descriptions: [{ lang: 'en', value: 'Untrusted search path in ssh-agent in OpenSSH before 7.4.' }], metrics: { cvssMetricV31: [{ cvssData: { baseSeverity: 'HIGH' } }] } } },
+    { cve: { id: 'CVE-2016-10010', descriptions: [{ lang: 'es', value: 'spanish' }, { lang: 'en', value: 'sshd privsep flaw.' }], metrics: {} } },
+    { cve: {} },
+  ] };
+  const hits = parseNvd(sample);
+  assert.equal(hits.length, 2, 'skips entries with no id');
+  assert.deepEqual(hits[0], { id: 'CVE-2016-10009', summary: 'Untrusted search path in ssh-agent in OpenSSH before 7.4.', severity: 'HIGH' });
+  assert.equal(hits[1].summary, 'sshd privsep flaw.', 'prefers the English description');
+  assert.deepEqual(parseNvd({}), [], 'empty response → no hits');
 });
 
 test('identifyBanner extracts product + version for CVE lookup', () => {

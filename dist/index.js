@@ -11,5 +11,6 @@ export { toSarif } from './sarif.js';
 export { detectStacks } from './detect.js';
 export { frameworkChecks } from './framework.js';
 export { hostChecks, identifyEdge } from './host.js';
+export { lookupCves, parseNvd } from './cve.js';
 export { agentChecks, evaluateAgentReadiness, visibleText, aiCrawlersBlocked, AI_CRAWLERS, } from './agent.js';
 export { findingKey, buildBaseline, applyBaseline, } from './baseline.js';

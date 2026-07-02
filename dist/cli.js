@@ -26,6 +26,7 @@ import { buildBaseline, applyBaseline } from './baseline.js';
 import { loadConfig } from './config.js';
 import { recon, parsePorts } from './active.js';
 import { identifyEdge } from './host.js';
+import { lookupCves } from './cve.js';
 const VERSION = (() => {
     try {
         return JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
@@ -102,7 +103,7 @@ async function runBatch(targets, opts, o) {
 async function runRecon() {
     const target = process.argv[3];
     if (!target || target.startsWith('-')) {
-        console.error('usage: anal-probe recon <host|url> --yes-i-am-authorized [--ports common|all|top1000|22,80,...] [--force] [--timeout <ms>] [--json]');
+        console.error('usage: anal-probe recon <host|url> --yes-i-am-authorized [--ports common|all|top1000|22,80,...] [--cve] [--force] [--timeout <ms>] [--json]');
         process.exit(2);
         return;
     }
@@ -139,7 +140,18 @@ async function runRecon() {
     const timeoutMs = tRaw && Number(tRaw) > 0 ? Number(tRaw) : undefined;
     console.error(`scanning ${host} — ${ports.length} port(s)${edge.behindCdn ? ' (forced, note: CDN edge)' : ''}…`);
     const result = await recon(host, ports, { timeoutMs });
+    // --cve: correlate each identified service version against NVD (sequential — respects NVD rate limit).
+    const cveByPort = {};
+    if (flag('--cve')) {
+        for (const p of result.open) {
+            if (p.product && p.version) {
+                cveByPort[p.port] = await lookupCves(p.product, p.version, { max: 5 });
+                await new Promise((r) => setTimeout(r, 700));
+            }
+        }
+    }
     if (flag('--json')) {
+        result.cves = cveByPort;
         console.log(JSON.stringify(result, null, 2));
     }
     else {
@@ -150,7 +162,18 @@ async function runRecon() {
             console.log(`  ${icon} ${p.port}/tcp  ${s ? s.name : 'open'}${s?.note ? ` — ${s.note}` : ''}`);
             if (p.product || p.version) {
                 const idn = [p.product, p.version].filter(Boolean).join(' ');
-                console.log(`        identified: ${idn}${p.version ? `  ↳ check CVEs for ${idn} (e.g. cvedetails.com / nvd.nist.gov)` : ''}`);
+                const hits = cveByPort[p.port];
+                if (hits && hits.length) {
+                    console.log(`        identified: ${idn} — ${hits.length} known CVE(s):`);
+                    for (const c of hits)
+                        console.log(`          • ${c.id}${c.severity ? ` [${c.severity}]` : ''}: ${c.summary}`);
+                }
+                else if (flag('--cve')) {
+                    console.log(`        identified: ${idn} — no CVEs matched (or NVD rate-limited; retry, or use \`anal-probe cve ${idn}\`)`);
+                }
+                else {
+                    console.log(`        identified: ${idn}${p.version ? `  ↳ add --cve to check NVD (or see nvd.nist.gov)` : ''}`);
+                }
             }
             if (p.banner)
                 console.log(`        banner: ${p.banner}`);
@@ -197,6 +220,29 @@ async function runBrowse() {
     }
     process.exit(findings.some((fnd) => !fnd.pass && fnd.severity === 'high') ? 1 : 0);
 }
+// Standalone CVE lookup for a product + version (reads NVD; informational only).
+async function runCve() {
+    const product = process.argv[3];
+    const version = process.argv[4];
+    if (!product || product.startsWith('-')) {
+        console.error('usage: anal-probe cve <product> [version]   e.g. anal-probe cve OpenSSH 7.4');
+        process.exit(2);
+        return;
+    }
+    const hits = await lookupCves(product, version || '', { max: 10 });
+    if (flag('--json')) {
+        console.log(JSON.stringify(hits, null, 2));
+    }
+    else {
+        console.log(`\n🔎 NVD CVEs for "${product}${version ? ' ' + version : ''}" — ${hits.length} result(s)\n`);
+        for (const c of hits)
+            console.log(`  • ${c.id}${c.severity ? ` [${c.severity}]` : ''}: ${c.summary}`);
+        if (!hits.length)
+            console.log('  (none matched — try a different version string, or NVD may be rate-limiting)');
+        console.log('');
+    }
+    process.exit(hits.some((c) => c.severity === 'CRITICAL' || c.severity === 'HIGH') ? 1 : 0);
+}
 async function main() {
     if (process.argv[2] === 'audit')
         return runAudit();
@@ -204,6 +250,8 @@ async function main() {
         return runRecon();
     if (process.argv[2] === 'browse')
         return runBrowse();
+    if (process.argv[2] === 'cve')
+        return runCve();
     const cfgResult = loadConfig(arg('--config'));
     if (cfgResult.error) {
         console.error(cfgResult.error);
