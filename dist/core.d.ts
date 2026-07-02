@@ -1,8 +1,29 @@
+export interface TlsInfo {
+    /** Days until the served certificate expires (null if undeterminable). */
+    daysRemaining: number | null;
+    /** Negotiated protocol, e.g. "TLSv1.3" / "TLSv1.2" / "TLSv1" (null if undeterminable). */
+    protocol: string | null;
+    /** Negotiated cipher suite name (null if undeterminable). */
+    cipher: string | null;
+}
 /**
- * Days until the served TLS certificate expires (null if it can't be determined). Uses a raw TLS
- * connection because fetch() doesn't expose the peer certificate.
+ * Probe the served TLS: cert expiry + negotiated protocol + cipher. Uses a raw TLS connection because
+ * fetch() exposes none of this. Fails soft to nulls.
  */
+export declare function tlsProbe(host: string, port?: number): Promise<TlsInfo>;
+/** Back-compat wrapper — days until the served cert expires. */
 export declare function tlsCertDaysRemaining(host: string, port?: number): Promise<number | null>;
+/** Grade a negotiated TLS protocol. Pure/testable. */
+export declare function gradeTlsProtocol(protocol: string | null): {
+    ok: boolean;
+    severity: 'high' | 'medium' | 'low' | 'info';
+    detail: string;
+};
+/** Flag known-weak cipher suites. Pure/testable. */
+export declare function gradeTlsCipher(cipher: string | null): {
+    ok: boolean;
+    detail: string;
+};
 export declare const DEFAULT_TIMEOUT_MS = 10000;
 export declare function safeFetch(url: string, init?: RequestInit, timeoutMs?: number): Promise<Response | null>;
 /**

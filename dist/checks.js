@@ -2,7 +2,7 @@
 // Every check takes the shared ScanContext (homepage fetched once) and returns Finding[]. They are
 // grouped by Category. All are black-box: a URL is the only input, so the same kit works against any
 // vibe-coded app — Vite, Next, Astro, Rails, whatever — without touching the source.
-import { safeFetch, fetchText, resolveUrl, sameOrigin, html as H, scanSecrets, tlsCertDaysRemaining, } from './core.js';
+import { safeFetch, fetchText, resolveUrl, sameOrigin, html as H, scanSecrets, tlsProbe, gradeTlsProtocol, gradeTlsCipher, } from './core.js';
 const f = (category, id, title, severity, pass, detail, fix) => ({ category, id, title, severity, pass, detail, fix });
 // Parse a CSP header into a directive→sources map (lowercased directive names).
 function parseCsp(policy) {
@@ -144,15 +144,24 @@ export async function securityChecks(ctx) {
             out.push(f('security', 'cors.reflection', 'CORS origin reflection', dangerous ? 'high' : 'info', !dangerous, `ACAO=${acao || '(none)'} ACAC=${acac}`, dangerous ? 'Never reflect an arbitrary Origin while also allowing credentials — that lets any site read authenticated responses.' : undefined));
         }
     }
-    // TLS certificate expiry (https only) — reads the served cert via a raw TLS socket.
+    // TLS: cert expiry + protocol/cipher grading (https only) — reads the served cert via a raw TLS socket.
     if (url.protocol === 'https:') {
-        const days = await tlsCertDaysRemaining(url.hostname, Number(url.port) || 443);
+        const tlsInfo = await tlsProbe(url.hostname, Number(url.port) || 443);
+        const days = tlsInfo.daysRemaining;
         if (days === null) {
             out.push(f('security', 'tls.expiry', 'TLS cert expiry not determinable', 'info', true, 'could not read the peer certificate'));
         }
         else {
             const sev = days < 14 ? 'high' : days < 30 ? 'medium' : 'low';
             out.push(f('security', 'tls.expiry', `TLS cert expires in ${days} day(s)`, sev, days >= 14, days < 14 ? 'certificate expires very soon — renew now' : `${days} days remaining`, days >= 30 ? undefined : 'Renew the TLS certificate (or enable auto-renewal — Let\'s Encrypt/most hosts do this for you).'));
+        }
+        // Deprecated protocol (TLS 1.0/1.1/SSLv3) — the modern high-value TLS finding.
+        const proto = gradeTlsProtocol(tlsInfo.protocol);
+        out.push(f('security', 'tls.protocol', proto.ok ? `TLS protocol ${tlsInfo.protocol ?? '(unknown)'}` : `Deprecated TLS protocol ${tlsInfo.protocol}`, proto.severity, proto.ok, proto.detail, proto.ok ? undefined : 'Disable TLS 1.0/1.1 (and SSLv3) at the host/load-balancer — require TLS 1.2+ (ideally 1.3).'));
+        // Weak cipher suite.
+        const cipher = gradeTlsCipher(tlsInfo.cipher);
+        if (tlsInfo.cipher) {
+            out.push(f('security', 'tls.cipher', cipher.ok ? `TLS cipher ${tlsInfo.cipher}` : `Weak TLS cipher ${tlsInfo.cipher}`, 'medium', cipher.ok, cipher.detail, cipher.ok ? undefined : 'Disable weak/legacy ciphers (RC4/3DES/CBC/MD5/EXPORT) — prefer AEAD suites (AES-GCM / ChaCha20-Poly1305).'));
         }
     }
     // Subresource Integrity: cross-origin <script>/<link rel=stylesheet> should carry an integrity attr.

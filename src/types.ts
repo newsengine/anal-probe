@@ -15,7 +15,8 @@ export type Category =
   | 'a11y'         // lang, alt text, labels, viewport
   | 'performance'  // compression, caching, page weight
   | 'agent'        // agent-readiness: llms.txt, AI-crawler policy, SSR content, structured data
-  | 'framework';   // stack-specific misconfigs (Next.js/WordPress/Laravel/Django/Rails/Spring/ASP.NET)
+  | 'framework'    // stack-specific misconfigs (Next.js/WordPress/Laravel/Django/Rails/Spring/ASP.NET)
+  | 'host';        // passive infra intel: resolved IP(s), reverse DNS, CDN/hosting provider (no scanning)
 
 export interface Finding {
   id: string;

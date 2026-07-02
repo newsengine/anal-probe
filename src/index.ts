@@ -28,6 +28,7 @@ export {
 export { toSarif, type SarifOptions } from './sarif.js';
 export { detectStacks, type StackName, type StackSignal, type DetectInput } from './detect.js';
 export { frameworkChecks } from './framework.js';
+export { hostChecks, identifyEdge } from './host.js';
 export {
   agentChecks, evaluateAgentReadiness, visibleText, aiCrawlersBlocked, AI_CRAWLERS,
   type AgentReadinessInput,

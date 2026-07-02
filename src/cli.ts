@@ -43,6 +43,7 @@ const CAT_TITLE: Record<Category, string> = {
   dns: '🌐 DNS & email', reliability: '🔗 Reliability', seo: '🔎 SEO', a11y: '♿ Accessibility', performance: '⚡ Performance',
   agent: '🤖 Agent readiness',
   framework: '🧩 Framework-specific',
+  host: '🖥️  Host & infrastructure',
 };
 
 async function runAudit() {

@@ -11,6 +11,7 @@ import { dnsChecks } from './dns.js';
 import { agentChecks } from './agent.js';
 import { frameworkChecks } from './framework.js';
 import { detectStacks } from './detect.js';
+import { hostChecks } from './host.js';
 
 export type { Category, Finding, ScanContext, ScanOptions, Severity };
 // Back-compat alias: ProbeOptions was the old name.
@@ -27,6 +28,7 @@ const RUNNERS: Record<Category, (ctx: ScanContext) => Promise<Finding[]>> = {
   performance: performanceChecks,
   agent: agentChecks,
   framework: frameworkChecks,
+  host: hostChecks,
 };
 
 export const ALL_CATEGORIES = Object.keys(RUNNERS) as Category[];

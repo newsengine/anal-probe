@@ -13,6 +13,8 @@ import { buildBaseline, applyBaseline } from '../dist/baseline.js';
 import { evaluateDnsHygiene, apexOf } from '../dist/dns.js';
 import { evaluateAgentReadiness, visibleText, aiCrawlersBlocked } from '../dist/agent.js';
 import { detectStacks } from '../dist/detect.js';
+import { gradeTlsProtocol, gradeTlsCipher } from '../dist/core.js';
+import { identifyEdge } from '../dist/host.js';
 
 function server(handler: http.RequestListener): Promise<{ url: string; close: () => void }> {
   return new Promise((resolve) => {
@@ -581,6 +583,33 @@ test('findSensitiveFields spots secret keys in a response body', () => {
   assert.deepEqual(findSensitiveFields('{"user":"x","access_token":"ey..."}').sort(), ['access_token']);
   assert.ok(findSensitiveFields('{"password_hash":"$2b$10$...","role":"admin"}').includes('password_hash'));
   assert.deepEqual(findSensitiveFields('{"id":1,"name":"ok"}'), [], 'clean body has none');
+});
+
+// ═══════════════════════ deeper TLS grading (#5) ════════════════════════════
+
+test('gradeTlsProtocol flags deprecated protocols, passes modern ones', () => {
+  assert.equal(gradeTlsProtocol('TLSv1').ok, false);
+  assert.equal(gradeTlsProtocol('TLSv1').severity, 'high');
+  assert.equal(gradeTlsProtocol('TLSv1.1').ok, false);
+  assert.equal(gradeTlsProtocol('TLSv1.2').ok, true);
+  assert.equal(gradeTlsProtocol('TLSv1.3').ok, true);
+  assert.equal(gradeTlsProtocol(null).ok, true, 'undeterminable is not a failure');
+});
+
+test('gradeTlsCipher flags weak/legacy ciphers, passes AEAD', () => {
+  assert.equal(gradeTlsCipher('ECDHE-RSA-RC4-SHA').ok, false);
+  assert.equal(gradeTlsCipher('ECDHE-RSA-DES-CBC3-SHA').ok, false);
+  assert.equal(gradeTlsCipher('TLS_AES_256_GCM_SHA384').ok, true);
+  assert.equal(gradeTlsCipher('ECDHE-RSA-CHACHA20-POLY1305').ok, true);
+});
+
+// ═══════════════════════ host / infrastructure intel ═══════════════════════
+
+test('identifyEdge fingerprints CDN/hosting providers from headers', () => {
+  assert.deepEqual(identifyEdge({ 'cf-ray': '123', server: 'cloudflare' }), { providers: ['Cloudflare'], behindCdn: true });
+  assert.equal(identifyEdge({ 'x-vercel-id': 'abc' }).providers[0], 'Vercel');
+  assert.equal(identifyEdge({ server: 'nginx/1.25' }).behindCdn, false, 'a bare nginx origin is not a CDN');
+  assert.deepEqual(identifyEdge({}), { providers: [], behindCdn: false });
 });
 
 // ═══════════════════════ framework fingerprinting (#14) ═════════════════════

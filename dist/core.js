@@ -4,10 +4,10 @@
 // deploy in one command. Regex HTML parsing is "good enough" for black-box posture checks.
 import tls from 'node:tls';
 /**
- * Days until the served TLS certificate expires (null if it can't be determined). Uses a raw TLS
- * connection because fetch() doesn't expose the peer certificate.
+ * Probe the served TLS: cert expiry + negotiated protocol + cipher. Uses a raw TLS connection because
+ * fetch() exposes none of this. Fails soft to nulls.
  */
-export function tlsCertDaysRemaining(host, port = 443) {
+export function tlsProbe(host, port = 443) {
     return new Promise((resolve) => {
         let done = false;
         const finish = (v) => { if (!done) {
@@ -17,18 +17,43 @@ export function tlsCertDaysRemaining(host, port = 443) {
         try {
             const socket = tls.connect({ host, port, servername: host, timeout: 8000 }, () => {
                 const cert = socket.getPeerCertificate();
+                const protocol = socket.getProtocol();
+                const cipher = socket.getCipher()?.name ?? null;
                 socket.end();
-                if (!cert || !cert.valid_to)
-                    return finish(null);
-                finish(Math.floor((new Date(cert.valid_to).getTime() - Date.now()) / 86_400_000));
+                const daysRemaining = cert && cert.valid_to
+                    ? Math.floor((new Date(cert.valid_to).getTime() - Date.now()) / 86_400_000)
+                    : null;
+                finish({ daysRemaining, protocol, cipher });
             });
-            socket.on('error', () => finish(null));
-            socket.on('timeout', () => { socket.destroy(); finish(null); });
+            socket.on('error', () => finish({ daysRemaining: null, protocol: null, cipher: null }));
+            socket.on('timeout', () => { socket.destroy(); finish({ daysRemaining: null, protocol: null, cipher: null }); });
         }
         catch {
-            finish(null);
+            finish({ daysRemaining: null, protocol: null, cipher: null });
         }
     });
+}
+/** Back-compat wrapper — days until the served cert expires. */
+export async function tlsCertDaysRemaining(host, port = 443) {
+    return (await tlsProbe(host, port)).daysRemaining;
+}
+/** Grade a negotiated TLS protocol. Pure/testable. */
+export function gradeTlsProtocol(protocol) {
+    if (!protocol)
+        return { ok: true, severity: 'info', detail: 'protocol not determinable' };
+    const deprecated = { TLSv1: 'high', 'TLSv1.1': 'high', SSLv3: 'high', SSLv2: 'high' };
+    if (protocol in deprecated)
+        return { ok: false, severity: deprecated[protocol], detail: `${protocol} is deprecated and known-insecure` };
+    if (protocol === 'TLSv1.2')
+        return { ok: true, severity: 'low', detail: 'TLSv1.2 (fine; TLSv1.3 preferred)' };
+    return { ok: true, severity: 'info', detail: protocol };
+}
+/** Flag known-weak cipher suites. Pure/testable. */
+export function gradeTlsCipher(cipher) {
+    if (!cipher)
+        return { ok: true, detail: 'cipher not determinable' };
+    const weak = /RC4|3DES|DES-|_DES|MD5|NULL|EXPORT|(^|_)CBC(_|$)/i.test(cipher);
+    return { ok: !weak, detail: weak ? `${cipher} is a weak/legacy cipher` : cipher };
 }
 // Every network call gets a hard deadline so a dead/slow/hostile site can't hang the scan forever.
 export const DEFAULT_TIMEOUT_MS = 10_000;

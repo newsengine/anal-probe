@@ -5,27 +5,61 @@
 
 import tls from 'node:tls';
 
+export interface TlsInfo {
+  /** Days until the served certificate expires (null if undeterminable). */
+  daysRemaining: number | null;
+  /** Negotiated protocol, e.g. "TLSv1.3" / "TLSv1.2" / "TLSv1" (null if undeterminable). */
+  protocol: string | null;
+  /** Negotiated cipher suite name (null if undeterminable). */
+  cipher: string | null;
+}
+
 /**
- * Days until the served TLS certificate expires (null if it can't be determined). Uses a raw TLS
- * connection because fetch() doesn't expose the peer certificate.
+ * Probe the served TLS: cert expiry + negotiated protocol + cipher. Uses a raw TLS connection because
+ * fetch() exposes none of this. Fails soft to nulls.
  */
-export function tlsCertDaysRemaining(host: string, port = 443): Promise<number | null> {
+export function tlsProbe(host: string, port = 443): Promise<TlsInfo> {
   return new Promise((resolve) => {
     let done = false;
-    const finish = (v: number | null) => { if (!done) { done = true; resolve(v); } };
+    const finish = (v: TlsInfo) => { if (!done) { done = true; resolve(v); } };
     try {
       const socket = tls.connect({ host, port, servername: host, timeout: 8000 }, () => {
         const cert = socket.getPeerCertificate();
+        const protocol = socket.getProtocol();
+        const cipher = socket.getCipher()?.name ?? null;
         socket.end();
-        if (!cert || !cert.valid_to) return finish(null);
-        finish(Math.floor((new Date(cert.valid_to).getTime() - Date.now()) / 86_400_000));
+        const daysRemaining = cert && cert.valid_to
+          ? Math.floor((new Date(cert.valid_to).getTime() - Date.now()) / 86_400_000)
+          : null;
+        finish({ daysRemaining, protocol, cipher });
       });
-      socket.on('error', () => finish(null));
-      socket.on('timeout', () => { socket.destroy(); finish(null); });
+      socket.on('error', () => finish({ daysRemaining: null, protocol: null, cipher: null }));
+      socket.on('timeout', () => { socket.destroy(); finish({ daysRemaining: null, protocol: null, cipher: null }); });
     } catch {
-      finish(null);
+      finish({ daysRemaining: null, protocol: null, cipher: null });
     }
   });
+}
+
+/** Back-compat wrapper — days until the served cert expires. */
+export async function tlsCertDaysRemaining(host: string, port = 443): Promise<number | null> {
+  return (await tlsProbe(host, port)).daysRemaining;
+}
+
+/** Grade a negotiated TLS protocol. Pure/testable. */
+export function gradeTlsProtocol(protocol: string | null): { ok: boolean; severity: 'high' | 'medium' | 'low' | 'info'; detail: string } {
+  if (!protocol) return { ok: true, severity: 'info', detail: 'protocol not determinable' };
+  const deprecated: Record<string, 'high' | 'medium'> = { TLSv1: 'high', 'TLSv1.1': 'high', SSLv3: 'high', SSLv2: 'high' };
+  if (protocol in deprecated) return { ok: false, severity: deprecated[protocol], detail: `${protocol} is deprecated and known-insecure` };
+  if (protocol === 'TLSv1.2') return { ok: true, severity: 'low', detail: 'TLSv1.2 (fine; TLSv1.3 preferred)' };
+  return { ok: true, severity: 'info', detail: protocol };
+}
+
+/** Flag known-weak cipher suites. Pure/testable. */
+export function gradeTlsCipher(cipher: string | null): { ok: boolean; detail: string } {
+  if (!cipher) return { ok: true, detail: 'cipher not determinable' };
+  const weak = /RC4|3DES|DES-|_DES|MD5|NULL|EXPORT|(^|_)CBC(_|$)/i.test(cipher);
+  return { ok: !weak, detail: weak ? `${cipher} is a weak/legacy cipher` : cipher };
 }
 
 // Every network call gets a hard deadline so a dead/slow/hostile site can't hang the scan forever.
