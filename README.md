@@ -8,6 +8,8 @@ gaps. One command, **zero install**, no source access, no headless browser:
 npx github:newsengine/anal-probe https://your-app.example.com
 ```
 
+📄 **Landing page:** [`docs/index.html`](docs/index.html) (self-contained; serve via GitHub Pages from `/docs`).
+
 Built for vibe coders shipping with AI: you don't need to know what to look for — the scanner does, and
 every failing finding comes with a one-line **fix**. Exits non-zero so it doubles as a CI gate.
 

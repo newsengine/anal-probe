@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>anal-probe — point it at any deploy, it tells you what's wrong</title>
+<meta name="description" content="Zero-install black-box scanner: leaked secrets, exposed config, missing headers, TLS, DNS, framework misconfigs, OWASP/ASVS/CWE compliance — safe to run against production.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0d120e; --panel2:#0a0e0b; --edge:#1b271f;
+    --ink:#d9e6da; --mut:#7f9585; --dim:#556258;
+    --lime:#a9ef4f; --lime-dim:#6f9e37; --glow:rgba(169,239,79,.35);
+    --hi:#ff5f56; --md:#ffb638; --lo:#f2e85c;
+    --mono:'JetBrains Mono',ui-monospace,monospace; --sans:'IBM Plex Sans',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;
+    -webkit-font-smoothing:antialiased;overflow-x:hidden}
+  /* ---- atmospheric background: grid + phosphor glow + grain + scanline ---- */
+  .bg{position:fixed;inset:0;z-index:-2;pointer-events:none;
+    background:
+      radial-gradient(900px 500px at 78% -8%, rgba(169,239,79,.10), transparent 60%),
+      radial-gradient(700px 600px at 5% 100%, rgba(60,120,80,.10), transparent 55%),
+      linear-gradient(var(--bg),var(--bg));}
+  .bg::before{content:"";position:absolute;inset:0;
+    background-image:linear-gradient(rgba(120,160,130,.05) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(120,160,130,.05) 1px,transparent 1px);
+    background-size:44px 44px;mask-image:radial-gradient(ellipse 100% 80% at 50% 0%,#000 40%,transparent 85%);}
+  .grain{position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.04;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");}
+  .scan{position:fixed;left:0;right:0;height:2px;z-index:-1;pointer-events:none;
+    background:linear-gradient(90deg,transparent,var(--glow),transparent);
+    box-shadow:0 0 14px 2px var(--glow);animation:sweep 7s linear infinite;opacity:.5}
+  @keyframes sweep{0%{top:-2%}100%{top:102%}}
+
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+
+  /* ---- nav ---- */
+  nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(8px);
+    background:linear-gradient(var(--bg),rgba(7,10,8,.6));border-bottom:1px solid var(--edge)}
+  nav .wrap{display:flex;align-items:center;justify-content:space-between;height:62px}
+  .brand{display:flex;align-items:center;gap:11px;font-family:var(--mono);font-weight:800;letter-spacing:-.02em}
+  .brand b{color:var(--lime);text-shadow:0 0 12px var(--glow)}
+  .dot{width:11px;height:11px;border-radius:50%;background:var(--lime);box-shadow:0 0 0 0 var(--glow);
+    animation:pulse 2.4s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 var(--glow)}70%{box-shadow:0 0 0 9px transparent}100%{box-shadow:0 0 0 0 transparent}}
+  .navlinks{display:flex;gap:26px;font-family:var(--mono);font-size:13px}
+  .navlinks a{color:var(--mut);text-decoration:none;transition:color .2s}
+  .navlinks a:hover{color:var(--lime)}
+  @media(max-width:720px){.navlinks{display:none}}
+
+  /* ---- hero ---- */
+  header{padding:72px 0 40px}
+  .tag{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:12px;
+    color:var(--lime-dim);border:1px solid var(--edge);border-radius:100px;padding:6px 14px;margin-bottom:26px;
+    text-transform:uppercase;letter-spacing:.14em}
+  h1{font-family:var(--mono);font-weight:800;letter-spacing:-.035em;line-height:1.02;margin:0 0 20px;
+    font-size:clamp(38px,7vw,74px)}
+  h1 .cursor{display:inline-block;width:.56ch;height:.92em;background:var(--lime);vertical-align:-2px;
+    margin-left:4px;box-shadow:0 0 14px var(--glow);animation:blink 1.05s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+  .lede{font-size:clamp(17px,2.4vw,21px);color:var(--mut);max-width:640px;margin:0 0 34px}
+  .lede b{color:var(--ink);font-weight:600}
+  .cmd{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .npx{font-family:var(--mono);font-size:15px;background:var(--panel);border:1px solid var(--edge);
+    border-radius:10px;padding:15px 18px;color:var(--ink);position:relative;overflow:hidden}
+  .npx .p{color:var(--lime)}
+  .npx .u{color:var(--mut)}
+  .copy{font-family:var(--mono);font-size:12px;color:var(--dim);border:none;background:none;cursor:pointer;
+    padding:4px 8px;border-radius:6px;transition:.2s}
+  .copy:hover{color:var(--lime);background:rgba(169,239,79,.08)}
+  .cta{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-weight:700;font-size:14px;
+    text-decoration:none;color:#08120a;background:var(--lime);padding:14px 22px;border-radius:10px;
+    box-shadow:0 6px 30px -8px var(--glow);transition:transform .15s, box-shadow .2s}
+  .cta:hover{transform:translateY(-2px);box-shadow:0 10px 40px -8px var(--glow)}
+  .cta.ghost{background:none;color:var(--ink);border:1px solid var(--edge);box-shadow:none}
+  .cta.ghost:hover{border-color:var(--lime-dim);color:var(--lime)}
+  .ctarow{display:flex;gap:14px;flex-wrap:wrap;margin-top:26px}
+
+  /* ---- terminal ---- */
+  .term{margin:52px 0 10px;border:1px solid var(--edge);border-radius:14px;overflow:hidden;
+    background:linear-gradient(180deg,var(--panel),var(--panel2));box-shadow:0 30px 80px -30px #000, inset 0 1px 0 rgba(255,255,255,.03)}
+  .term .bar{display:flex;align-items:center;gap:8px;padding:12px 15px;border-bottom:1px solid var(--edge);
+    font-family:var(--mono);font-size:12px;color:var(--dim)}
+  .term .bar i{width:11px;height:11px;border-radius:50%;display:inline-block}
+  .term .bar .t{margin-left:12px}
+  .term pre{margin:0;padding:20px 22px;font-family:var(--mono);font-size:13.2px;line-height:1.72;
+    overflow-x:auto;color:var(--ink)}
+  .term .ln{display:block;opacity:0;animation:rise .5s forwards}
+  @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .c-mut{color:var(--mut)} .c-lime{color:var(--lime)} .c-hi{color:var(--hi)} .c-md{color:var(--md)}
+  .c-lo{color:var(--lo)} .c-dim{color:var(--dim)}
+
+  /* ---- sections ---- */
+  section{padding:66px 0}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--lime-dim);margin:0 0 12px}
+  h2{font-family:var(--mono);font-weight:800;letter-spacing:-.03em;font-size:clamp(26px,4vw,40px);margin:0 0 14px}
+  .sub{color:var(--mut);max-width:640px;margin:0 0 40px}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+  .card{border:1px solid var(--edge);border-radius:12px;padding:20px;background:var(--panel);
+    transition:border-color .2s, transform .2s, background .2s}
+  .card:hover{border-color:var(--lime-dim);transform:translateY(-3px);background:#101711}
+  .card .ic{font-size:20px}
+  .card h3{font-family:var(--mono);font-size:15px;font-weight:700;margin:12px 0 6px;letter-spacing:-.01em}
+  .card p{font-size:13.5px;color:var(--mut);margin:0}
+
+  .modes{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+  .mode{border:1px solid var(--edge);border-radius:12px;padding:22px;background:var(--panel);position:relative}
+  .mode .cmdline{font-family:var(--mono);font-size:12.5px;color:var(--lime);margin-bottom:10px;
+    background:var(--panel2);border:1px solid var(--edge);border-radius:7px;padding:8px 11px;display:inline-block}
+  .mode h3{font-family:var(--mono);font-size:16px;margin:0 0 6px}
+  .mode p{font-size:13.5px;color:var(--mut);margin:0}
+  .badge{position:absolute;top:18px;right:18px;font-family:var(--mono);font-size:10px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--lime-dim);border:1px solid var(--edge);border-radius:6px;padding:3px 8px}
+  .badge.opt{color:var(--md);border-color:rgba(255,182,56,.25)}
+
+  /* ---- compliance ---- */
+  .comp{display:grid;grid-template-columns:1.1fr .9fr;gap:24px;align-items:stretch}
+  @media(max-width:760px){.comp{grid-template-columns:1fr}}
+  .scorecard{border:1px solid var(--edge);border-radius:14px;background:linear-gradient(180deg,var(--panel),var(--panel2));
+    padding:26px;text-align:center;display:flex;flex-direction:column;justify-content:center}
+  .gradeGrid{display:flex;gap:30px;justify-content:center;margin:6px 0 4px}
+  .grade{font-family:var(--mono)}
+  .grade .g{font-size:64px;font-weight:800;line-height:1}
+  .grade .g.a{color:var(--lime);text-shadow:0 0 24px var(--glow)}
+  .grade .g.f{color:var(--hi);text-shadow:0 0 24px rgba(255,95,86,.35)}
+  .grade .lab{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin-top:8px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px;justify-content:center}
+  .chip{font-family:var(--mono);font-size:11px;color:var(--mut);border:1px solid var(--edge);
+    border-radius:6px;padding:5px 10px}
+  .chip b{color:var(--lime)}
+  .stdlist{border:1px solid var(--edge);border-radius:14px;background:var(--panel);padding:8px 4px}
+  .std{display:flex;align-items:center;gap:12px;padding:11px 18px;border-bottom:1px solid rgba(28,38,32,.6);
+    font-size:13.5px}
+  .std:last-child{border-bottom:none}
+  .std .m{font-family:var(--mono);font-size:13px;width:26px;text-align:center}
+  .std .n{color:var(--ink)} .std .d{color:var(--dim);margin-left:auto;font-family:var(--mono);font-size:11px}
+  .yes{color:var(--lime)} .part{color:var(--md)} .no{color:var(--hi)}
+
+  /* ---- safe strip ---- */
+  .safe{border:1px solid var(--edge);border-radius:14px;padding:30px;background:
+    radial-gradient(600px 200px at 80% 0,rgba(169,239,79,.06),transparent 60%),var(--panel)}
+  .safe h2{font-size:26px}
+  .safe ul{list-style:none;padding:0;margin:14px 0 0;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:620px){.safe ul{grid-template-columns:1fr}}
+  .safe li{font-size:14px;color:var(--mut);padding-left:26px;position:relative}
+  .safe li::before{content:"▸";position:absolute;left:4px;color:var(--lime)}
+  .safe li b{color:var(--ink);font-weight:600}
+
+  footer{border-top:1px solid var(--edge);padding:44px 0;margin-top:20px}
+  footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:18px}
+  footer .npx{font-size:13px}
+  .fnote{font-family:var(--mono);font-size:12px;color:var(--dim)}
+  .fnote a{color:var(--mut);text-decoration:none;border-bottom:1px solid var(--edge)}
+  .fnote a:hover{color:var(--lime)}
+  ::selection{background:var(--lime);color:#08120a}
+</style>
+</head>
+<body>
+<div class="bg"></div><div class="grain"></div><div class="scan"></div>
+
+<nav><div class="wrap">
+  <div class="brand"><span class="dot"></span>anal<b>-</b>probe</div>
+  <div class="navlinks">
+    <a href="#checks">Checks</a><a href="#modes">Modes</a><a href="#compliance">Compliance</a>
+    <a href="https://github.com/newsengine/anal-probe">GitHub ↗</a>
+  </div>
+</div></nav>
+
+<header><div class="wrap">
+  <span class="tag"><span class="dot" style="width:7px;height:7px"></span>black-box · zero-install · safe to run</span>
+  <h1>Point it at a deploy.<br>It tells you what's&nbsp;wrong.<span class="cursor"></span></h1>
+  <p class="lede">One command scans any deployed app for <b>leaked secrets</b>, <b>exposed config</b>,
+     <b>missing headers</b>, <b>weak TLS</b>, <b>framework misconfigs</b> and more — every finding with a
+     one-line fix, mapped to <b>OWASP, ASVS &amp; CWE</b>. No source, no browser, no attack payloads.</p>
+  <div class="cmd">
+    <div class="npx"><span class="p">npx</span> github:newsengine/anal-probe <span class="u">https://your-app.com</span></div>
+    <button class="copy" id="copy">⧉ copy</button>
+  </div>
+  <div class="ctarow">
+    <a class="cta" href="https://github.com/newsengine/anal-probe">Get started →</a>
+    <a class="cta ghost" href="#compliance">See the standards it covers</a>
+  </div>
+
+  <div class="term" aria-hidden="true">
+    <div class="bar"><i style="background:#ff5f56"></i><i style="background:#ffbd2e"></i><i style="background:#27c93f"></i>
+      <span class="t">anal-probe https://acme.example --compliance</span></div>
+<pre><span class="ln" style="animation-delay:.05s">🔬 <span class="c-lime">anal-probe</span> — full app scan of <span class="c-mut">https://acme.example</span></span>
+<span class="ln" style="animation-delay:.20s"><span class="c-dim">🔐 Security</span></span>
+<span class="ln" style="animation-delay:.32s">  <span class="c-hi">🟥 [HIGH]</span> Missing content-security-policy   <span class="c-dim">↳ CWE-693 · ASVS V14.4.3</span></span>
+<span class="ln" style="animation-delay:.44s">  <span class="c-lime">✅ [HIGH]</span> Served over HTTPS · TLS 1.3 · AES-256-GCM</span>
+<span class="ln" style="animation-delay:.56s"><span class="c-dim">🔑 Leaked secrets</span>  <span class="c-lime">— ok</span>   <span class="c-dim">scanned 20 bundles</span></span>
+<span class="ln" style="animation-delay:.68s"><span class="c-dim">📂 Exposed files</span>  <span class="c-lime">— ok</span></span>
+<span class="ln" style="animation-delay:.80s"><span class="c-dim">🧩 Framework</span>  Detected: <span class="c-lime">Next.js</span> · __NEXT_DATA__ clean</span>
+<span class="ln" style="animation-delay:.92s"><span class="c-dim">🖥️  Host</span>  6 <span class="c-lime">Cloudflare</span> edge IPs — origin behind a CDN</span>
+<span class="ln" style="animation-delay:1.04s"> </span>
+<span class="ln" style="animation-delay:1.16s">🏅 <span class="c-mut">Scorecard</span> — security grade <span class="c-hi">F (35/100)</span> · TLS grade <span class="c-lime">A</span></span>
+<span class="ln" style="animation-delay:1.28s">📋 <span class="c-mut">ASVS L1</span> 11 pass · 9 fail · <span class="c-dim">3 not-observed</span>  <span class="c-dim">(of 25)</span></span>
+<span class="ln" style="animation-delay:1.40s"><span class="c-mut">18 passed, 16 failed</span>  <span class="c-hi">🟥 1</span> <span class="c-md">🟧 7</span> <span class="c-lo">🟨 8</span><span class="cursor" style="height:1em"></span></span></pre>
+  </div>
+</div></header>
+
+<section id="checks"><div class="wrap">
+  <p class="kicker">10 categories, one request</p>
+  <h2>Everything wrong with a deploy</h2>
+  <p class="sub">Each finding is signature-validated to keep false positives near zero, and ships with a plain-English fix.</p>
+  <div class="grid">
+    <div class="card"><div class="ic">🔑</div><h3>Leaked secrets</h3><p>API keys, tokens & private keys in your HTML and JS bundles — Stripe, AWS, Supabase service_role, GitHub. Source maps too.</p></div>
+    <div class="card"><div class="ic">📂</div><h3>Exposed files</h3><p>.env / .git / configs, backups, debug &amp; admin endpoints, directory listings, GraphQL introspection, stack traces.</p></div>
+    <div class="card"><div class="ic">🔐</div><h3>Security &amp; TLS</h3><p>Headers, CSP linting, cookies, CORS, open-redirect, SRI, and TLS protocol/cipher grading over a raw socket.</p></div>
+    <div class="card"><div class="ic">🌐</div><h3>DNS &amp; email</h3><p>SPF, DMARC (with policy strength), CAA, and a dangling-CNAME subdomain-takeover heuristic. Correct on .com.au.</p></div>
+    <div class="card"><div class="ic">🧩</div><h3>Framework-aware</h3><p>Fingerprints the stack, then probes its known misconfigs — Next.js, WordPress, Laravel, Django, Rails, Spring, ASP.NET.</p></div>
+    <div class="card"><div class="ic">🖥️</div><h3>Host intel</h3><p>Resolved IPs, reverse DNS, and CDN/hosting provider — so you know whether an IP is your origin or an edge.</p></div>
+    <div class="card"><div class="ic">🤖</div><h3>Agent-readiness</h3><p>llms.txt, AI-crawler policy, JS-only content, and structured data — is your site consumable by AI agents?</p></div>
+    <div class="card"><div class="ic">🔗</div><h3>Reliability &amp; SEO</h3><p>Broken links &amp; images, mixed content, title/description/canonical, robots &amp; sitemap, accessibility, performance.</p></div>
+  </div>
+</div></section>
+
+<section id="modes"><div class="wrap">
+  <p class="kicker">One tool, escalating depth</p>
+  <h2>Modes</h2>
+  <p class="sub">The default scan is passive and safe. The aggressive modes are opt-in, authorization-gated, and identify-only — never exploit.</p>
+  <div class="modes">
+    <div class="mode"><span class="badge">default</span><div class="cmdline">anal-probe &lt;url&gt;</div><h3>Scan</h3><p>The full 10-category black-box scan. Multi-page with <b>--crawl</b>, behind login with <b>--cookie</b>.</p></div>
+    <div class="mode"><span class="badge">deps</span><div class="cmdline">anal-probe audit</div><h3>Dependency CVEs</h3><p>Wraps npm audit and gates CI on severity, against the advisory database.</p></div>
+    <div class="mode"><span class="badge">nvd</span><div class="cmdline">anal-probe cve &lt;svc&gt; &lt;ver&gt;</div><h3>CVE lookup</h3><p>Correlate a detected service + version against NVD. Also wired into recon with <b>--cve</b>.</p></div>
+    <div class="mode"><span class="badge opt">opt-in</span><div class="cmdline">anal-probe recon &lt;host&gt;</div><h3>Active recon</h3><p>Authorization-gated, CDN-guarded port scan + banner/service/version ID. Identify-only — no exploitation, no DoS.</p></div>
+    <div class="mode"><span class="badge opt">batteries</span><div class="cmdline">anal-probe browse &lt;url&gt;</div><h3>Functional check</h3><p>Headless browser: JS errors, broken images, failed requests, and whether forms actually accept input.</p></div>
+    <div class="mode"><span class="badge opt">batteries</span><div class="cmdline">anal-probe separation cfg</div><h3>Account separation</h3><p>Drives two logged-in profiles to prove account B can't read account A's data. Read-only, no passwords.</p></div>
+  </div>
+</div></section>
+
+<section id="compliance"><div class="wrap">
+  <p class="kicker">Not just findings — conformance</p>
+  <h2>Scored against the standards</h2>
+  <p class="sub">Run any scan with <b style="color:var(--ink);font-family:var(--mono)">--compliance</b> for an A+–F scorecard and coverage against the checklists a black-box tool can honestly test.</p>
+  <div class="comp">
+    <div class="stdlist">
+      <div class="std"><span class="m yes">✓</span><span class="n">OWASP ASVS 4.0.3 — Level 1</span><span class="d">23/25</span></div>
+      <div class="std"><span class="m yes">✓</span><span class="n">OWASP Top 10 (2021)</span><span class="d">mapped</span></div>
+      <div class="std"><span class="m yes">✓</span><span class="n">OWASP API Security Top 10 (2023)</span><span class="d">partial</span></div>
+      <div class="std"><span class="m yes">✓</span><span class="n">OWASP WSTG</span><span class="d">per-finding</span></div>
+      <div class="std"><span class="m yes">✓</span><span class="n">CWE (MITRE) · in report + SARIF</span><span class="d">tagged</span></div>
+      <div class="std"><span class="m yes">✓</span><span class="n">CVE — deps (npm) &amp; services (NVD)</span><span class="d">live</span></div>
+      <div class="std"><span class="m yes">✓</span><span class="n">NIST 800-52 · PCI-DSS subset · WCAG</span><span class="d">mapped</span></div>
+      <div class="std"><span class="m no">—</span><span class="n">Injection / SSRF / auth flows</span><span class="d">out of scope</span></div>
+    </div>
+    <div class="scorecard">
+      <div class="gradeGrid">
+        <div class="grade"><div class="g f">F</div><div class="lab">Security</div></div>
+        <div class="grade"><div class="g a">A</div><div class="lab">TLS</div></div>
+      </div>
+      <div class="chips">
+        <span class="chip">ASVS <b>V9.1.3</b></span><span class="chip">Top10 <b>A05</b></span>
+        <span class="chip"><b>CWE-693</b></span><span class="chip">API <b>BOLA</b></span><span class="chip"><b>WSTG-CONF-06</b></span>
+      </div>
+      <p style="font-size:12.5px;color:var(--dim);margin:18px 0 0;font-family:var(--mono)">honest by design —<br>it tells you where coverage ends</p>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="safe">
+    <p class="kicker">The line we don't cross</p>
+    <h2>Safe to run against production</h2>
+    <ul>
+      <li><b>No attack payloads.</b> GET-only scanning — no SQLi/XSS fuzzing that could break a live app.</li>
+      <li><b>Identify, never exploit.</b> Recon reports open services; it never weaponizes them.</li>
+      <li><b>Authorization-gated.</b> Port scanning refuses to run unconfirmed, and won't scan a CDN edge.</li>
+      <li><b>Zero-install, zero-dependency.</b> One <span style="font-family:var(--mono);color:var(--lime)">npx</span> command; the committed build runs in CI with no bundler.</li>
+      <li><b>No passwords handled.</b> Authenticated modes reuse your own logged-in browser profiles.</li>
+      <li><b>Low false positives.</b> Every exposure is body-validated; SPA fallbacks don't trip it.</li>
+    </ul>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <div class="npx"><span class="p">npx</span> github:newsengine/anal-probe <span class="u">&lt;url&gt;</span></div>
+  <div class="fnote">MIT · <a href="https://github.com/newsengine/anal-probe">newsengine/anal-probe</a> · built to be the clean, fast, tells-you-how-to-fix-it gate</div>
+</div></footer>
+
+<script>
+  document.getElementById('copy').addEventListener('click',function(){
+    navigator.clipboard.writeText('npx github:newsengine/anal-probe https://your-app.com');
+    this.textContent='✓ copied';setTimeout(()=>this.textContent='⧉ copy',1600);
+  });
+</script>
+</body>
+</html>
