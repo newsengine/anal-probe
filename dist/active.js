@@ -45,6 +45,32 @@ export const SERVICES = {
 // Web ports worth noting even though they're "expected".
 const WEB_PORTS = [80, 443, 3000, 5000, 8000];
 export const COMMON_PORTS = [...new Set([...Object.keys(SERVICES).map(Number), ...WEB_PORTS])].sort((a, b) => a - b);
+// Web ports where a Server header (grabbed with one GET) identifies the software.
+const HTTP_PORTS = new Set([80, 443, 3000, 5000, 8000, 8080, 8443, 8888, 9000]);
+/**
+ * Identify product + version from a service banner (SSH/FTP/SMTP send one on connect; web servers via a
+ * `Server:` header). IDENTIFY only — the caller can then look the version up against a CVE source.
+ */
+export function identifyBanner(banner) {
+    if (!banner)
+        return {};
+    let m = banner.match(/SSH-[\d.]+-([A-Za-z][\w.-]*?)[_/ ]([\d][\w.]*)/i); // SSH-2.0-OpenSSH_8.9p1
+    if (m)
+        return { product: m[1], version: m[2] };
+    m = banner.match(/Server:\s*([A-Za-z][\w.-]*?)[/ ]([\d][\w.]*)/i); // Server: nginx/1.18.0
+    if (m)
+        return { product: m[1], version: m[2] };
+    m = banner.match(/Server:\s*([A-Za-z][\w.-]+)/i); // Server: cloudflare
+    if (m)
+        return { product: m[1] };
+    m = banner.match(/\b(vsftpd|ProFTPD|Pure-FTPd|FileZilla|Postfix|Exim|Sendmail|OpenSSH|nginx|Apache|Microsoft-IIS|lighttpd|Jetty|Tomcat|Werkzeug|gunicorn|Kestrel)\b[\/ ]?v?([\d][\w.]*)?/i);
+    if (m)
+        return { product: m[1], version: m[2] || undefined };
+    m = banner.match(/\b(\d+\.\d+\.\d+[\w.-]*)\b/); // bare version fallback
+    if (m)
+        return { version: m[1] };
+    return {};
+}
 /** One TCP-connect probe. open=true if the handshake completes; grabs an early banner if the service sends one. */
 export function scanPort(host, port, timeoutMs = 2500) {
     return new Promise((resolve) => {
@@ -101,5 +127,23 @@ export function parsePorts(spec) {
 export async function recon(host, ports, opts = {}) {
     const ips = await dns.resolve4(host).catch(() => []);
     const open = await scanPorts(host, ports, opts);
+    // Enrich: grab a Server header on open web ports (one GET), then identify product/version from banners.
+    await Promise.all(open.map(async (p) => {
+        if (!p.banner && HTTP_PORTS.has(p.port)) {
+            const scheme = p.port === 443 || p.port === 8443 ? 'https' : 'http';
+            try {
+                const ac = new AbortController();
+                const t = setTimeout(() => ac.abort(), opts.timeoutMs ?? 5000);
+                const res = await fetch(`${scheme}://${host}:${p.port}/`, { method: 'HEAD', redirect: 'manual', signal: ac.signal }).finally(() => clearTimeout(t));
+                const server = res.headers.get('server');
+                if (server)
+                    p.banner = `Server: ${server}`;
+            }
+            catch { /* not HTTP or unreachable — leave banner empty */ }
+        }
+        const id = identifyBanner(p.banner || '');
+        p.product = id.product;
+        p.version = id.version;
+    }));
     return { host, ips, open, scanned: ports.length };
 }

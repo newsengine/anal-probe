@@ -1,0 +1,24 @@
+{
+  "_comment": "Starter preset for a Next.js app (App/Pages Router API routes). Adapt paths + roles to your app, set tokens via env, then: node examples/security-suite/run.mjs examples/security-suite/presets/nextjs.json",
+  "baseURL": "https://your-next-app.example.com",
+  "actors": {
+    "anonymous": {},
+    "user": { "headers": { "authorization": "Bearer ${USER_TOKEN}", "cookie": "${USER_COOKIE}" } },
+    "admin": { "headers": { "authorization": "Bearer ${ADMIN_TOKEN}", "cookie": "${ADMIN_COOKIE}" } }
+  },
+  "protectedEndpoints": [
+    { "name": "admin API", "method": "GET", "path": "/api/admin/users", "allow": ["admin"] },
+    { "name": "current user (any login)", "method": "GET", "path": "/api/me", "allow": ["user", "admin"] },
+    { "name": "user resources require login", "method": "GET", "path": "/api/items", "allow": ["user", "admin"] }
+  ],
+  "ownerScopedLists": [
+    { "name": "items are owner-scoped", "method": "GET", "path": "/api/items", "idRegex": "\"id\"\\s*:\\s*\"?([\\w-]+)\"?", "userA": "user", "userB": "admin" }
+  ],
+  "massAssignment": [
+    { "name": "owner id not client-writable", "method": "POST", "path": "/api/items", "as": "user", "body": { "title": "probe", "userId": "FORGED-ATTACKER-ID" }, "forgedValue": "FORGED-ATTACKER-ID" }
+  ],
+  "sensitiveScan": [
+    { "name": "session route hides secrets", "path": "/api/auth/session", "as": "user" }
+  ],
+  "sensitiveFields": ["password", "password_hash", "access_token", "refresh_token", "service_role", "client_secret"]
+}

@@ -148,6 +148,10 @@ async function runRecon() {
             const s = p.service;
             const icon = s ? SEV_ICON[s.severity] : 'ℹ️ ';
             console.log(`  ${icon} ${p.port}/tcp  ${s ? s.name : 'open'}${s?.note ? ` — ${s.note}` : ''}`);
+            if (p.product || p.version) {
+                const idn = [p.product, p.version].filter(Boolean).join(' ');
+                console.log(`        identified: ${idn}${p.version ? `  ↳ check CVEs for ${idn} (e.g. cvedetails.com / nvd.nist.gov)` : ''}`);
+            }
             if (p.banner)
                 console.log(`        banner: ${p.banner}`);
         }
