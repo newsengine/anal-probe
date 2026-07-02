@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { probe, summarize, normalizeUrl } from '../dist/probe.js';
 import { scanSecrets, html as H } from '../dist/core.js';
-import { checkSecurityHeaders, checkCookieFlags, idorProbe } from '../dist/testkit.js';
+import { checkSecurityHeaders, checkCookieFlags, idorProbe, setTenantParam, classifyTenantAccess } from '../dist/testkit.js';
 import { failsAtLevel } from '../dist/audit.js';
 import { lintCsp } from '../dist/checks.js';
 import { toSarif } from '../dist/sarif.js';
@@ -500,4 +500,34 @@ test('extraHeaders are sent on same-origin requests (scan behind login)', async 
   srv.close();
   assert.ok(sawAuthOnEnv, 'auth cookie reached the same-origin /.env probe');
   assert.ok(findings.find((f) => f.id === 'exposed/.env' && !f.pass), 'finds the .env only reachable while authenticated');
+});
+
+// ═══════════════════════ multi-tenant / separation-of-accounts ══════════════
+
+test('setTenantParam replaces or adds the tenant id, keeping relative URLs relative', () => {
+  assert.equal(setTenantParam('/api/x?tenant_uuid=AAA&page=1', 'BBB'), '/api/x?tenant_uuid=BBB&page=1');
+  assert.equal(setTenantParam('/api/x?page=1', 'BBB'), '/api/x?page=1&tenant_uuid=BBB');
+  assert.equal(setTenantParam('https://h.example/api/x', 'BBB'), 'https://h.example/api/x?tenant_uuid=BBB');
+  assert.equal(setTenantParam('/api/x?org=AAA', 'BBB', 'org'), '/api/x?org=BBB');
+});
+
+test('classifyTenantAccess: leak vs isolated vs inconclusive', () => {
+  const ownerData = { status: 200, body: '{"records":[{"id":1,"secret":"A-private"}]}' };
+  const attackerOwn = { status: 200, body: '{"records":[]}' };
+
+  // Attacker got the owner's exact data -> LEAK.
+  assert.equal(classifyTenantAccess({ baseline: ownerData, attack: ownerData, control: attackerOwn }).verdict, 'leak');
+
+  // Attacker denied outright -> isolated.
+  assert.equal(classifyTenantAccess({ baseline: ownerData, attack: { status: 403, body: 'no' }, control: attackerOwn }).verdict, 'isolated');
+
+  // Attacker got 200 but empty / their own scope -> isolated (no owner data disclosed).
+  assert.equal(classifyTenantAccess({ baseline: ownerData, attack: { status: 200, body: '{"data":null}' }, control: attackerOwn }).verdict, 'isolated');
+  assert.equal(classifyTenantAccess({ baseline: ownerData, attack: attackerOwn, control: attackerOwn }).verdict, 'isolated');
+
+  // Baseline itself failed (stale token) -> inconclusive, NOT a pass.
+  assert.equal(classifyTenantAccess({ baseline: { status: 401, body: 'x' }, attack: { status: 401, body: 'x' } }).verdict, 'inconclusive');
+
+  // 200 with foreign-but-non-owner data -> needs a human.
+  assert.equal(classifyTenantAccess({ baseline: ownerData, attack: { status: 200, body: '{"records":[{"id":99}]}' }, control: attackerOwn }).verdict, 'inspect');
 });

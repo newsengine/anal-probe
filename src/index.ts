@@ -11,7 +11,9 @@ export {
 } from './core.js';
 export {
   idorProbe, checkSecurityHeaders, checkCookieFlags,
+  setTenantParam, classifyTenantAccess,
   type IdorCase, type IdorResult, type TenantAuth,
+  type TenantProbeResponse, type TenantVerdict,
 } from './testkit.js';
 export {
   runNpmAudit, failsAtLevel, type AuditResult,

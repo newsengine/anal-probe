@@ -1,2 +1,5 @@
 node_modules
 *.log
+
+# tenant-isolation local config (contains tenant ids)
+examples/tenant-isolation/config.json
