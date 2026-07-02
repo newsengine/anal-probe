@@ -59,7 +59,10 @@ const CHECKS = {
         const out = [];
         if (res) {
             const body = (await res.text()).slice(0, 8000);
-            const debug = /You're seeing this error because you have\s+<code>DEBUG = True|DJANGO_SETTINGS_MODULE|Django Version:/i.test(body);
+            // Canonical Django debug-500 phrase only — appears nowhere but the DEBUG=True error page (avoids
+            // matching docs that merely mention "Django Version:" or the settings-module env var name).
+            const debug = /You're seeing this error because you have\s*(?:<code>)?\s*DEBUG\s*=\s*True/i.test(body)
+                || (/DJANGO_SETTINGS_MODULE/.test(body) && /Traceback \(most recent call last\)|<div id="?traceback/i.test(body));
             out.push(f('framework.django.debug', debug ? 'Django DEBUG=True in production' : 'Django DEBUG not exposed', debug ? 'high' : 'info', !debug, debug ? 'an unknown URL returned a Django debug error page (leaks settings, paths, SQL)' : 'no Django debug page on an unknown route', debug ? 'Set DEBUG=False in production settings — the debug page leaks your settings, installed apps, and stack traces.' : undefined));
         }
         return out;

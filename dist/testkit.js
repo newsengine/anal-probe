@@ -109,7 +109,7 @@ export function setTenantParam(url, tenantId, param = 'tenant_uuid') {
     const isAbsolute = /^[a-z][a-z0-9+.-]*:\/\//i.test(url);
     const u = new URL(url, isAbsolute ? undefined : 'http://placeholder.invalid');
     u.searchParams.set(param, tenantId);
-    return isAbsolute ? u.toString() : u.pathname + u.search;
+    return isAbsolute ? u.toString() : u.pathname + u.search + u.hash;
 }
 /**
  * Judge one cross-tenant probe from three observations:
@@ -138,8 +138,16 @@ export function classifyTenantAccess(o) {
         if (!trivial && attack.body === baseline.body && (!control || attack.body !== control.body)) {
             return { verdict: 'leak', reason: "attacker received the owner's exact data" };
         }
-        if (!control || attack.body === control.body || attack.body.trim().length <= 2 || /"data"\s*:\s*(null|\[\]|\{\})/.test(attack.body)) {
-            return { verdict: 'isolated', reason: '200 but no owner data returned (empty / own-scope)' };
+        // Genuinely empty / no-data response ⇒ isolated regardless of control.
+        if (attack.body.trim().length <= 2 || /"data"\s*:\s*(null|\[\]|\{\})/.test(attack.body)) {
+            return { verdict: 'isolated', reason: '200 but no owner data returned (empty response)' };
+        }
+        // Non-empty body: we can only call it isolated if it matches the attacker's OWN control data.
+        if (control && attack.body === control.body) {
+            return { verdict: 'isolated', reason: "200 returning the attacker's own-scope data, not the owner's" };
+        }
+        if (!control) {
+            return { verdict: 'inconclusive', reason: '200 with data but no attacker-control response to compare — cannot tell own-data from a leak' };
         }
         return { verdict: 'inspect', reason: "200 with data that is neither the owner's nor the attacker's own — review manually" };
     }

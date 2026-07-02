@@ -507,6 +507,22 @@ test('extraHeaders are sent on same-origin requests (scan behind login)', async 
   assert.ok(findings.find((f) => f.id === 'exposed/.env' && !f.pass), 'finds the .env only reachable while authenticated');
 });
 
+test('auth-debug leak: fires on a real secret value, NOT on a field-name mention', async () => {
+  const leaky = await server((req, res) => {
+    if (req.url === '/api/auth/debug') { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"user":"x","password_hash":"$2b$10$abcdefghijklmnopqrstuv"}'); return; }
+    res.writeHead(404); res.end('no');
+  });
+  const a = await probe(leaky.url, { only: ['exposure'] }); leaky.close();
+  assert.ok(a.find((f) => f.id === 'debug-leak/api/auth/debug' && !f.pass), 'flags an actual leaked hash value');
+
+  const docs = await server((req, res) => {
+    if (req.url === '/api/auth/debug') { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"schema":["password_hash","access_token"],"note":"fields we never return"}'); return; }
+    res.writeHead(404); res.end('no');
+  });
+  const b = await probe(docs.url, { only: ['exposure'] }); docs.close();
+  assert.ok(!b.some((f) => f.id.startsWith('debug-leak') && !f.pass), 'does NOT false-positive on field-name mentions');
+});
+
 // ═══════════════════════ multi-tenant / separation-of-accounts ══════════════
 
 test('setTenantParam replaces or adds the tenant id, keeping relative URLs relative', () => {
@@ -663,6 +679,20 @@ test('detectStacks fingerprints Next.js, WordPress, Laravel, Spring with high co
 test('detectStacks does not fingerprint a plain static site', () => {
   const s = detectStacks({ html: '<html><body><h1>hello</h1></body></html>', headers: hdr({}), setCookie: [] });
   assert.equal(s.filter((x) => x.confidence === 'high').length, 0, 'no false-positive stack on a plain page');
+});
+
+test('detectStacks: a lone spoofable x-powered-by is only MEDIUM (not high) — no framework probing', () => {
+  const s = detectStacks({ html: '<html></html>', headers: hdr({ 'x-powered-by': 'Express' }), setCookie: [] });
+  const express = s.find((x) => x.name === 'Express');
+  assert.equal(express?.confidence, 'medium', 'a single spoofable header must not reach high confidence');
+});
+
+test('classifyTenantAccess: 200 with data but no control is INCONCLUSIVE, not a false pass', () => {
+  const owner = { status: 200, body: '{"records":[{"id":1,"secret":"A"}]}' };
+  const attackNonEmpty = { status: 200, body: '{"records":[{"id":2}]}' };
+  assert.equal(classifyTenantAccess({ baseline: owner, attack: attackNonEmpty }).verdict, 'inconclusive');
+  // still correctly isolated when the body is genuinely empty
+  assert.equal(classifyTenantAccess({ baseline: owner, attack: { status: 200, body: '{"data":null}' } }).verdict, 'isolated');
 });
 
 test('framework category: probes WordPress user-enum only when WP is detected', async () => {

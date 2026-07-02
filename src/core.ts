@@ -58,7 +58,10 @@ export function gradeTlsProtocol(protocol: string | null): { ok: boolean; severi
 /** Flag known-weak cipher suites. Pure/testable. */
 export function gradeTlsCipher(cipher: string | null): { ok: boolean; detail: string } {
   if (!cipher) return { ok: true, detail: 'cipher not determinable' };
-  const weak = /RC4|3DES|DES-|_DES|MD5|NULL|EXPORT|(^|_)CBC(_|$)/i.test(cipher);
+  // Explicitly-broken primitives, OR CBC-mode suites (named "…-SHA"/"…CBC…" without an AEAD marker).
+  const explicit = /RC4|3DES|(^|[-_])DES([-_]|$)|MD5|NULL|EXPORT|ANON/i.test(cipher);
+  const cbcMode = (/CBC/i.test(cipher) || /-SHA\d*$/i.test(cipher)) && !/GCM|CCM|CHACHA|POLY1305/i.test(cipher);
+  const weak = explicit || cbcMode;
   return { ok: !weak, detail: weak ? `${cipher} is a weak/legacy cipher` : cipher };
 }
 
@@ -70,7 +73,8 @@ async function fetchWithTimeout(url: string, init: RequestInit | undefined, time
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), timeoutMs);
   try {
-    return await fetch(url, { signal: ac.signal, ...init });
+    // signal LAST so a caller-supplied init can't clobber the timeout.
+    return await fetch(url, { ...init, signal: ac.signal });
   } finally {
     clearTimeout(timer);
   }
@@ -114,7 +118,8 @@ export async function fetchText(
       if (read >= maxBytes) { await reader.cancel(); break; }
     }
     out += decoder.decode();
-    return out.length > maxBytes ? out.slice(0, maxBytes) : out;
+    // Memory is already bounded by the byte-counted read loop above; return as-is.
+    return out;
   } catch {
     return '';
   }

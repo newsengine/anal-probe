@@ -165,23 +165,26 @@ async function main() {
     // Batch mode: --urls <file> (one URL per line) or --crawl <N> (homepage + N same-origin pages).
     const urlsFile = arg('--urls');
     const crawlN = arg('--crawl') ? num('--crawl', 0) : config.crawl;
-    if (urlsFile || crawlN) {
-        let targets;
-        if (urlsFile) {
-            try {
-                targets = readFileSync(urlsFile, 'utf8').split(/\r?\n/).map((s) => s.trim()).filter(Boolean).map(normalizeUrl);
-            }
-            catch (e) {
-                console.error(`could not read --urls ${urlsFile}: ${String(e?.message || e)}`);
-                process.exit(2);
-                return;
-            }
+    if (urlsFile) {
+        let targets = [];
+        try {
+            targets = readFileSync(urlsFile, 'utf8').split(/\r?\n/).map((s) => s.trim()).filter((s) => s && !s.startsWith('#')).map(normalizeUrl);
         }
-        else {
-            targets = [url, ...await discoverPages(url, crawlN, opts)];
+        catch (e) {
+            console.error(`could not read --urls ${urlsFile}: ${String(e?.message || e)}`);
+            process.exit(2);
         }
+        if (!targets.length) {
+            console.error(`--urls ${urlsFile} contains no URLs`);
+            process.exit(2);
+        }
+        return runBatch(targets, opts, { failOn, quiet, json: flag('--json') }); // batch even for a single listed URL
+    }
+    if (crawlN) {
+        const targets = [url, ...await discoverPages(url, crawlN, opts)];
         if (targets.length > 1)
             return runBatch(targets, opts, { failOn, quiet, json: flag('--json') });
+        // only the homepage was found — fall through to the normal single-URL flow below
     }
     const findings = await probe(url, opts);
     const sum = summarize(findings);

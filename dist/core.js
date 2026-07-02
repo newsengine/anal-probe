@@ -52,7 +52,10 @@ export function gradeTlsProtocol(protocol) {
 export function gradeTlsCipher(cipher) {
     if (!cipher)
         return { ok: true, detail: 'cipher not determinable' };
-    const weak = /RC4|3DES|DES-|_DES|MD5|NULL|EXPORT|(^|_)CBC(_|$)/i.test(cipher);
+    // Explicitly-broken primitives, OR CBC-mode suites (named "…-SHA"/"…CBC…" without an AEAD marker).
+    const explicit = /RC4|3DES|(^|[-_])DES([-_]|$)|MD5|NULL|EXPORT|ANON/i.test(cipher);
+    const cbcMode = (/CBC/i.test(cipher) || /-SHA\d*$/i.test(cipher)) && !/GCM|CCM|CHACHA|POLY1305/i.test(cipher);
+    const weak = explicit || cbcMode;
     return { ok: !weak, detail: weak ? `${cipher} is a weak/legacy cipher` : cipher };
 }
 // Every network call gets a hard deadline so a dead/slow/hostile site can't hang the scan forever.
@@ -62,7 +65,8 @@ async function fetchWithTimeout(url, init, timeoutMs) {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), timeoutMs);
     try {
-        return await fetch(url, { signal: ac.signal, ...init });
+        // signal LAST so a caller-supplied init can't clobber the timeout.
+        return await fetch(url, { ...init, signal: ac.signal });
     }
     finally {
         clearTimeout(timer);
@@ -102,7 +106,8 @@ export async function fetchText(url, init, maxBytes = 3_000_000, timeoutMs = DEF
             }
         }
         out += decoder.decode();
-        return out.length > maxBytes ? out.slice(0, maxBytes) : out;
+        // Memory is already bounded by the byte-counted read loop above; return as-is.
+        return out;
     }
     catch {
         return '';

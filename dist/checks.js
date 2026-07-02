@@ -276,7 +276,7 @@ const EXPOSED_PATHS = [
 const LISTABLE_DIRS = ['/uploads/', '/files/', '/backup/', '/backups/', '/.git/', '/static/', '/assets/', '/data/'];
 // A real Apache/nginx/generic autoindex page — NOT an SPA index (which has a root mount div + script bundle).
 function looksLikeDirListing(body) {
-    if (/<div[^>]+id=["']?(?:root|app|__next)["']?/i.test(body))
+    if (/<div[^>]*\bid=["'](?:root|app|__next)["']/i.test(body))
         return false;
     return /<title>Index of \//i.test(body)
         || /Directory listing for \//i.test(body)
@@ -321,7 +321,9 @@ export async function exposureChecks(ctx) {
     }
     // Debug/introspection endpoints that echo server secrets (service-role keys, tokens, password hashes).
     // Safe GETs; body-validated so an SPA/HTML fallback or a normal JSON response doesn't false-positive.
-    const SECRET_IN_BODY = /"?(?:service_role|SUPABASE_SERVICE_ROLE_KEY|CRON_SECRET|STRIPE_SECRET(?:_KEY)?|password_hash|encrypted_password)"?|\$2[aby]\$|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|"(?:access_token|refresh_token|client_secret)"\s*:\s*"[^"]{8,}/i;
+    // Require a real JSON key→value (or a full key/hash), so docs that merely mention "password_hash" or a
+    // schema field name don't false-positive; only actual leaked VALUES trigger it.
+    const SECRET_IN_BODY = /"(?:service_role|SUPABASE_SERVICE_ROLE_KEY|CRON_SECRET|STRIPE_SECRET(?:_KEY)?|password_hash|encrypted_password|access_token|refresh_token|client_secret)"\s*:\s*"?[^"\s,}]{6,}|\$2[aby]\$[.\/A-Za-z0-9]{20,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\brole"\s*:\s*"service_role"/i;
     for (const dbg of ['/api/auth/debug', '/api/debug', '/api/_debug', '/api/auth/check', '/api/config', '/api/env']) {
         const res = await safeFetch(ctx.origin + dbg, { redirect: 'follow', headers: ctx.opts.extraHeaders });
         if (!res || !res.ok)
@@ -345,13 +347,11 @@ export async function exposureChecks(ctx) {
             out.push(f('exposure', 'error.stacktrace', 'Error pages leak stack traces / internal paths', 'medium', false, 'an unknown URL returned a server stack trace or internal file paths', 'Return a generic error page in production; never echo stack traces or file paths to users.'));
         }
     }
-    // GraphQL introspection enabled (leaks the whole API schema).
+    // GraphQL introspection enabled (leaks the whole API schema). Sent as a GET introspection query so the
+    // scan stays purely GET (the query is read-only; GET introspection is supported by most GraphQL servers).
+    const gqlQuery = '?query=' + encodeURIComponent('{__schema{queryType{name}}}');
     for (const gqlPath of ['/graphql', '/api/graphql']) {
-        const res = await safeFetch(ctx.origin + gqlPath, {
-            method: 'POST', redirect: 'follow',
-            headers: { 'content-type': 'application/json', ...ctx.opts.extraHeaders },
-            body: JSON.stringify({ query: '{__schema{queryType{name}}}' }),
-        });
+        const res = await safeFetch(ctx.origin + gqlPath + gqlQuery, { redirect: 'follow', headers: { accept: 'application/json', ...ctx.opts.extraHeaders } });
         if (res && res.ok) {
             const body = await res.text();
             if (/"__schema"|"queryType"/.test(body)) {
