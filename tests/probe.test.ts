@@ -17,6 +17,8 @@ import { evaluateAgentReadiness, visibleText, aiCrawlersBlocked } from '../dist/
 import { detectStacks } from '../dist/detect.js';
 import { gradeTlsProtocol, gradeTlsCipher } from '../dist/core.js';
 import { identifyEdge } from '../dist/host.js';
+import { scanPort, parsePorts } from '../dist/active.js';
+import net from 'node:net';
 
 function server(handler: http.RequestListener): Promise<{ url: string; close: () => void }> {
   return new Promise((resolve) => {
@@ -647,6 +649,28 @@ test('gradeTlsCipher flags weak/legacy ciphers, passes AEAD', () => {
   assert.equal(gradeTlsCipher('ECDHE-RSA-DES-CBC3-SHA').ok, false);
   assert.equal(gradeTlsCipher('TLS_AES_256_GCM_SHA384').ok, true);
   assert.equal(gradeTlsCipher('ECDHE-RSA-CHACHA20-POLY1305').ok, true);
+});
+
+// ═══════════════════════ active recon (identify-only) ══════════════════════
+
+test('parsePorts handles common/all/list/garbage', () => {
+  assert.ok(parsePorts('common').length > 20);
+  assert.equal(parsePorts('all').length, 65535);
+  assert.deepEqual(parsePorts('22,80,443'), [22, 80, 443]);
+  assert.deepEqual(parsePorts('bad,99999,-1,0'), [], 'invalid ports are dropped');
+});
+
+test('scanPort detects an open port (with banner) and a closed one', async () => {
+  const srv = net.createServer((s) => s.end('SSH-2.0-OpenSSH_9.0\r\n'));
+  await new Promise((r) => srv.listen(0, '127.0.0.1', () => r(null)));
+  const port = (srv.address()).port;
+  const open = await scanPort('127.0.0.1', port, 1500);
+  srv.close();
+  assert.equal(open.open, true, 'listening port reports open');
+  assert.match(open.banner || '', /OpenSSH_9\.0/, 'grabs the service banner');
+
+  const closed = await scanPort('127.0.0.1', 1, 800);
+  assert.equal(closed.open, false, 'a port with nothing listening reports closed');
 });
 
 // ═══════════════════════ host / infrastructure intel ═══════════════════════

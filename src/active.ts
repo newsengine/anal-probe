@@ -70,6 +70,9 @@ export function scanPort(host: string, port: number, timeoutMs = 2500): Promise<
     sock.once('connect', () => { connected = true; sock.setTimeout(700); }); // short window to catch a banner
     sock.on('data', (d) => { banner += d.toString('latin1'); if (banner.length > 200) done(true); });
     sock.on('timeout', () => done(connected)); // connected but silent = open; never connected = filtered/closed
+    // A banner-then-disconnect service (SSH/FTP/SMTP often) closes after sending — resolve on close/end,
+    // else the idle-timeout never fires on the already-closed socket and the scan would hang.
+    sock.on('close', () => done(connected));
     sock.on('error', () => done(false));
     sock.connect(port, host);
   });

@@ -24,6 +24,8 @@ import { runNpmAudit, failsAtLevel } from './audit.js';
 import { toSarif } from './sarif.js';
 import { buildBaseline, applyBaseline } from './baseline.js';
 import { loadConfig } from './config.js';
+import { recon, parsePorts } from './active.js';
+import { identifyEdge } from './host.js';
 const VERSION = (() => {
     try {
         return JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
@@ -96,9 +98,70 @@ async function runBatch(targets, opts, o) {
     }
     process.exit(anyFail ? 1 : 0);
 }
+// ACTIVE recon subcommand — opt-in, authorization-gated, CDN-guarded. Identify only (no exploitation).
+async function runRecon() {
+    const target = process.argv[3];
+    if (!target || target.startsWith('-')) {
+        console.error('usage: anal-probe recon <host|url> --yes-i-am-authorized [--ports common|all|top1000|22,80,...] [--force] [--timeout <ms>] [--json]');
+        process.exit(2);
+        return;
+    }
+    if (!flag('--yes-i-am-authorized')) {
+        console.error('⚠️  Active reconnaissance (port scanning) sends real connections to the target.\n' +
+            '    Only run against systems you OWN or are explicitly AUTHORIZED to test — unauthorized scanning may be illegal.\n' +
+            '    This is IDENTIFY-ONLY: no exploitation, no DoS/flooding, no credential brute-forcing.\n' +
+            '    Re-run with --yes-i-am-authorized to confirm authorization.');
+        process.exit(2);
+        return;
+    }
+    let host;
+    try {
+        host = new URL(normalizeUrl(target)).hostname;
+    }
+    catch {
+        console.error(`invalid target: ${target}`);
+        process.exit(2);
+        return;
+    }
+    // CDN guard: the resolved IPs of a CDN-fronted host are the edge, not the origin — scanning them scans
+    // the CDN (a third party). Refuse unless --force.
+    const probeRes = await fetch(normalizeUrl(target), { redirect: 'manual' }).catch(() => null);
+    const edge = probeRes ? identifyEdge(probeRes.headers) : { providers: [], behindCdn: false };
+    if (edge.behindCdn && !flag('--force')) {
+        console.error(`🛑 ${host} is served via ${edge.providers.join('/')} (a CDN/edge). Its resolved IPs are ${edge.providers.join('/')} nodes,\n` +
+            `    not your origin — scanning them scans ${edge.providers.join('/')}'s infrastructure (and likely breaks their ToS).\n` +
+            `    Scan your origin's real IP directly instead. Override with --force ONLY if you're authorized to scan these IPs.`);
+        process.exit(2);
+        return;
+    }
+    const ports = parsePorts(arg('--ports'));
+    const tRaw = arg('--timeout');
+    const timeoutMs = tRaw && Number(tRaw) > 0 ? Number(tRaw) : undefined;
+    console.error(`scanning ${host} — ${ports.length} port(s)${edge.behindCdn ? ' (forced, note: CDN edge)' : ''}…`);
+    const result = await recon(host, ports, { timeoutMs });
+    if (flag('--json')) {
+        console.log(JSON.stringify(result, null, 2));
+    }
+    else {
+        console.log(`\n🖥️  recon ${host}  (${result.ips.join(', ') || 'no A record'}) — ${result.open.length} open of ${result.scanned} scanned\n`);
+        for (const p of result.open) {
+            const s = p.service;
+            const icon = s ? SEV_ICON[s.severity] : 'ℹ️ ';
+            console.log(`  ${icon} ${p.port}/tcp  ${s ? s.name : 'open'}${s?.note ? ` — ${s.note}` : ''}`);
+            if (p.banner)
+                console.log(`        banner: ${p.banner}`);
+        }
+        if (!result.open.length)
+            console.log('  (no open ports found)');
+        console.log('');
+    }
+    process.exit(result.open.some((p) => p.service?.severity === 'high') ? 1 : 0);
+}
 async function main() {
     if (process.argv[2] === 'audit')
         return runAudit();
+    if (process.argv[2] === 'recon')
+        return runRecon();
     const cfgResult = loadConfig(arg('--config'));
     if (cfgResult.error) {
         console.error(cfgResult.error);
