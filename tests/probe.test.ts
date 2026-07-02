@@ -20,6 +20,7 @@ import { identifyEdge } from '../dist/host.js';
 import { scanPort, parsePorts, identifyBanner } from '../dist/active.js';
 import { parseNvd } from '../dist/cve.js';
 import { refsFor, asvsCoverage, securityGrade, tlsGrade, cwesHit, apiTop10Hit } from '../dist/compliance.js';
+import { renderReport } from '../dist/report.js';
 import net from 'node:net';
 
 function server(handler: http.RequestListener): Promise<{ url: string; close: () => void }> {
@@ -673,6 +674,20 @@ test('refsFor maps findings to standards by longest prefix', () => {
   assert.equal(refsFor('cookie.sid').owasp, 'A05');
   assert.equal(refsFor('exposed/backup.zip').asvs?.includes('V12.5.1'), true);
   assert.deepEqual(refsFor('totally.unknown.id'), {}, 'unknown id → no refs');
+});
+
+test('renderReport builds a self-contained HTML report with findings, fixes and grades', () => {
+  const findings = [
+    { id: 'header.content-security-policy', category: 'security', title: 'Missing content-security-policy', severity: 'high', pass: false, detail: 'expected a CSP', fix: 'Add a CSP header' },
+    { id: 'tls.scheme', category: 'security', title: 'Served over HTTPS', severity: 'high', pass: true, detail: 'https://x' },
+  ];
+  const html = renderReport('https://acme.example', findings, { generatedAt: '2026-07-02 00:00 UTC' });
+  assert.ok(html.startsWith('<!DOCTYPE html>'), 'is a full HTML doc');
+  assert.ok(html.includes('https://acme.example'), 'includes the target');
+  assert.ok(html.includes('Missing content-security-policy') && html.includes('Add a CSP header'), 'includes finding + fix');
+  assert.ok(html.includes('CWE-693'), 'includes standards badge');
+  assert.ok(/Security · \d+\/100/.test(html), 'includes the security grade');
+  assert.ok(!html.includes('<script'), 'no scripts — safe to open/print');
 });
 
 test('refsFor carries CWE + API-Top-10 for relevant findings', () => {

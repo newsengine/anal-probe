@@ -308,7 +308,7 @@ async function main() {
     const config = cfgResult.config;
     const rawUrl = process.argv[2];
     if (!rawUrl || rawUrl.startsWith('-')) {
-        console.error('usage:\n  npx github:newsengine/anal-probe <url> [--only ...] [--skip ...] [--cors-path <p>] [--rate-limit-path <p>] [--timeout <ms>] [--cookie "<raw cookie>"] [--header "K: V"] [--crawl <N>] [--urls <file>] [--config <file>] [--fail-on high|medium|any] [--compliance] [--json] [--quiet]\n  npx github:newsengine/anal-probe audit [--prod] [--level low|moderate|high|critical] [--json]');
+        console.error('usage:\n  npx github:newsengine/anal-probe <url> [--only ...] [--skip ...] [--cors-path <p>] [--rate-limit-path <p>] [--timeout <ms>] [--cookie "<raw cookie>"] [--header "K: V"] [--crawl <N>] [--urls <file>] [--config <file>] [--fail-on high|medium|any] [--compliance] [--report <file.html>] [--pdf <file.pdf>] [--json] [--quiet]\n  npx github:newsengine/anal-probe audit [--prod] [--level low|moderate|high|critical] [--json]');
         process.exit(2);
     }
     const url = normalizeUrl(rawUrl); // accept bare domains (example.com -> https://example.com)
@@ -389,6 +389,32 @@ async function main() {
     }
     const findings = await probe(url, opts);
     const sum = summarize(findings);
+    // --report <file.html> / --pdf <file.pdf>: a shareable table report (every check + result + fix +
+    // standards). PDF renders the same HTML via the optional playwright-core battery.
+    const reportPath = arg('--report');
+    const pdfPath = arg('--pdf');
+    if (reportPath || pdfPath) {
+        const { renderReport } = await import('./report.js');
+        const html = renderReport(url, findings);
+        if (reportPath) {
+            writeFileSync(reportPath, html);
+            console.error(`📄 wrote HTML report → ${reportPath} (open it, then Print → Save as PDF)`);
+        }
+        if (pdfPath) {
+            try {
+                const { chromium } = await import('playwright-core');
+                const browser = await chromium.launch({ channel: 'chrome', headless: true }).catch(() => chromium.launch({ headless: true }));
+                const page = await browser.newPage();
+                await page.setContent(html, { waitUntil: 'load' });
+                await page.pdf({ path: pdfPath, format: 'A4', printBackground: true, margin: { top: '14mm', bottom: '14mm', left: '12mm', right: '12mm' } });
+                await browser.close();
+                console.error(`📄 wrote PDF report → ${pdfPath}`);
+            }
+            catch (e) {
+                console.error(`--pdf needs playwright-core + Chrome/Chromium (npm i -D playwright-core): ${String(e?.message || e)}`);
+            }
+        }
+    }
     // --write-baseline: snapshot today's failing findings and exit 0 (nothing to gate on the first run).
     const writeBaselinePath = arg('--write-baseline');
     if (writeBaselinePath) {
