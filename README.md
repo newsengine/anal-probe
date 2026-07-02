@@ -97,9 +97,11 @@ anal-probe audit --level high          # fail on any high/critical advisory (def
 anal-probe audit --prod --level moderate --json
 ```
 
-> Roadmap (PRs welcome): deeper **TLS** (protocol/cipher grading) and a **bounded multi-page crawl**.
-> Shipped: SARIF output, baseline/diff mode, CSP linting, DNS/email hygiene, **agent-readiness**,
-> **authenticated scan** (`--cookie`/`--header`), and **framework-specific check groups**.
+> Shipped: SARIF, baseline/diff, CSP linting, DNS/email hygiene, TLS protocol/cipher grading,
+> **agent-readiness**, **host intel**, **framework check groups**, **authenticated scan**
+> (`--cookie`/`--header`), **multi-page crawl** (`--crawl`), config file + batch (`--urls`), and the
+> opt-in **`recon`** (port scan) + **`browse`** (browser-functional) modes.
+> Roadmap (PRs welcome): framework preset configs, deeper CVE-informational service ID.
 
 ## Use it in CI across all repos (recommended)
 ```yaml
