@@ -1,0 +1,13 @@
+{
+  "origin": "https://app.example.com",
+  "chromeProfilesDir": "~/Library/Application Support/Google/Chrome",
+  "tenantParam": "tenant_uuid",
+  "owner":    { "label": "owner account",    "profile": "Profile 3", "tenant": "OWNER-TENANT-UUID" },
+  "attacker": { "label": "attacker account", "profile": "Profile 1", "tenant": "ATTACKER-TENANT-UUID" },
+  "appPaths": ["/", "/dashboard", "/settings"],
+  "endpoints": [
+    { "name": "billing subscription", "match": "billing/subscription" },
+    { "name": "credit balance",       "match": "billing/credit" },
+    { "name": "private records",      "match": "api/records" }
+  ]
+}

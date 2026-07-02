@@ -8,6 +8,10 @@ import {
   securityChecks, secretChecks, exposureChecks, reliabilityChecks, seoChecks, a11yChecks, performanceChecks,
 } from './checks.js';
 import { dnsChecks } from './dns.js';
+import { agentChecks } from './agent.js';
+import { frameworkChecks } from './framework.js';
+import { detectStacks } from './detect.js';
+import { hostChecks } from './host.js';
 
 export type { Category, Finding, ScanContext, ScanOptions, Severity };
 // Back-compat alias: ProbeOptions was the old name.
@@ -22,25 +26,40 @@ const RUNNERS: Record<Category, (ctx: ScanContext) => Promise<Finding[]>> = {
   seo: seoChecks,
   a11y: a11yChecks,
   performance: performanceChecks,
+  agent: agentChecks,
+  framework: frameworkChecks,
+  host: hostChecks,
 };
 
 export const ALL_CATEGORIES = Object.keys(RUNNERS) as Category[];
+
+/** Add https:// when the user typed a bare domain, so `anal-probe example.com` just works. */
+export function normalizeUrl(input: string): string {
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(input) ? input : `https://${input}`;
+}
 
 async function buildContext(baseUrl: string, opts: ScanOptions): Promise<ScanContext> {
   const url = new URL(baseUrl);
   let res: Response | null = null;
   let html = '';
   let headers = new Headers();
+  // The homepage fetch is the one call not going through safeFetch, so it needs its own hard timeout —
+  // otherwise a site that accepts the connection but never responds would hang the entire scan.
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? 10_000);
   try {
-    res = await fetch(url.origin, { redirect: 'follow' });
+    res = await fetch(url.origin, { redirect: 'follow', signal: ac.signal, headers: opts.extraHeaders });
     headers = res.headers;
     if ((res.headers.get('content-type') || '').includes('html')) {
       html = (await res.text()).slice(0, 5_000_000);
     }
   } catch {
     res = null;
+  } finally {
+    clearTimeout(timer);
   }
-  return { baseUrl, origin: url.origin, url, res, html, headers, opts };
+  const stacks = detectStacks({ html, headers, setCookie: (headers as any).getSetCookie?.() ?? [] });
+  return { baseUrl, origin: url.origin, url, res, html, headers, opts, stacks };
 }
 
 /** Run the comprehensive scan. Returns every finding across the selected categories. */
@@ -55,6 +74,30 @@ export async function probe(baseUrl: string, opts: ScanOptions = {}): Promise<Fi
 
 /** Alias — reads better for the full-app use case. */
 export const scan = probe;
+
+/**
+ * Discover up to `max` additional same-origin pages linked from the homepage — for a bounded multi-page
+ * crawl (`--crawl N`). Returns absolute URLs (excluding the homepage itself). Best-effort; [] on failure.
+ */
+export async function discoverPages(baseUrl: string, max: number, opts: ScanOptions = {}): Promise<string[]> {
+  const { safeFetch, html: H, resolveUrl, sameOrigin } = await import('./core.js');
+  const url = new URL(baseUrl);
+  const res = await safeFetch(url.origin, { redirect: 'follow', headers: opts.extraHeaders }, opts.timeoutMs);
+  if (!res || !res.ok) return [];
+  const body = (await res.text()).slice(0, 5_000_000);
+  const seen = new Set<string>([url.origin, url.origin + '/']);
+  const pages: string[] = [];
+  for (const href of H.links(body)) {
+    const abs = resolveUrl(url.origin, href);
+    if (!abs || !sameOrigin(abs, url.origin)) continue;
+    const norm = abs.split('#')[0];
+    if (seen.has(norm)) continue;
+    seen.add(norm);
+    pages.push(norm);
+    if (pages.length >= max) break;
+  }
+  return pages;
+}
 
 export function summarize(findings: Finding[]): {
   passed: number; failed: number; failHigh: number; failMedium: number; failLow: number;

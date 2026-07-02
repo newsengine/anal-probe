@@ -5,44 +5,121 @@
 
 import tls from 'node:tls';
 
+export interface TlsInfo {
+  /** Days until the served certificate expires (null if undeterminable). */
+  daysRemaining: number | null;
+  /** Negotiated protocol, e.g. "TLSv1.3" / "TLSv1.2" / "TLSv1" (null if undeterminable). */
+  protocol: string | null;
+  /** Negotiated cipher suite name (null if undeterminable). */
+  cipher: string | null;
+}
+
 /**
- * Days until the served TLS certificate expires (null if it can't be determined). Uses a raw TLS
- * connection because fetch() doesn't expose the peer certificate.
+ * Probe the served TLS: cert expiry + negotiated protocol + cipher. Uses a raw TLS connection because
+ * fetch() exposes none of this. Fails soft to nulls.
  */
-export function tlsCertDaysRemaining(host: string, port = 443): Promise<number | null> {
+export function tlsProbe(host: string, port = 443): Promise<TlsInfo> {
   return new Promise((resolve) => {
     let done = false;
-    const finish = (v: number | null) => { if (!done) { done = true; resolve(v); } };
+    const finish = (v: TlsInfo) => { if (!done) { done = true; resolve(v); } };
     try {
       const socket = tls.connect({ host, port, servername: host, timeout: 8000 }, () => {
         const cert = socket.getPeerCertificate();
+        const protocol = socket.getProtocol();
+        const cipher = socket.getCipher()?.name ?? null;
         socket.end();
-        if (!cert || !cert.valid_to) return finish(null);
-        finish(Math.floor((new Date(cert.valid_to).getTime() - Date.now()) / 86_400_000));
+        const daysRemaining = cert && cert.valid_to
+          ? Math.floor((new Date(cert.valid_to).getTime() - Date.now()) / 86_400_000)
+          : null;
+        finish({ daysRemaining, protocol, cipher });
       });
-      socket.on('error', () => finish(null));
-      socket.on('timeout', () => { socket.destroy(); finish(null); });
+      socket.on('error', () => finish({ daysRemaining: null, protocol: null, cipher: null }));
+      socket.on('timeout', () => { socket.destroy(); finish({ daysRemaining: null, protocol: null, cipher: null }); });
     } catch {
-      finish(null);
+      finish({ daysRemaining: null, protocol: null, cipher: null });
     }
   });
 }
 
-export async function safeFetch(url: string, init?: RequestInit): Promise<Response | null> {
+/** Back-compat wrapper — days until the served cert expires. */
+export async function tlsCertDaysRemaining(host: string, port = 443): Promise<number | null> {
+  return (await tlsProbe(host, port)).daysRemaining;
+}
+
+/** Grade a negotiated TLS protocol. Pure/testable. */
+export function gradeTlsProtocol(protocol: string | null): { ok: boolean; severity: 'high' | 'medium' | 'low' | 'info'; detail: string } {
+  if (!protocol) return { ok: true, severity: 'info', detail: 'protocol not determinable' };
+  const deprecated: Record<string, 'high' | 'medium'> = { TLSv1: 'high', 'TLSv1.1': 'high', SSLv3: 'high', SSLv2: 'high' };
+  if (protocol in deprecated) return { ok: false, severity: deprecated[protocol], detail: `${protocol} is deprecated and known-insecure` };
+  if (protocol === 'TLSv1.2') return { ok: true, severity: 'low', detail: 'TLSv1.2 (fine; TLSv1.3 preferred)' };
+  return { ok: true, severity: 'info', detail: protocol };
+}
+
+/** Flag known-weak cipher suites. Pure/testable. */
+export function gradeTlsCipher(cipher: string | null): { ok: boolean; detail: string } {
+  if (!cipher) return { ok: true, detail: 'cipher not determinable' };
+  // Explicitly-broken primitives, OR CBC-mode suites (named "…-SHA"/"…CBC…" without an AEAD marker).
+  const explicit = /RC4|3DES|(^|[-_])DES([-_]|$)|MD5|NULL|EXPORT|ANON/i.test(cipher);
+  const cbcMode = (/CBC/i.test(cipher) || /-SHA\d*$/i.test(cipher)) && !/GCM|CCM|CHACHA|POLY1305/i.test(cipher);
+  const weak = explicit || cbcMode;
+  return { ok: !weak, detail: weak ? `${cipher} is a weak/legacy cipher` : cipher };
+}
+
+// Every network call gets a hard deadline so a dead/slow/hostile site can't hang the scan forever.
+export const DEFAULT_TIMEOUT_MS = 10_000;
+
+/** fetch() with an AbortController timeout. Merges any caller-supplied signal-less init. */
+async function fetchWithTimeout(url: string, init: RequestInit | undefined, timeoutMs: number): Promise<Response> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
   try {
-    return await fetch(url, { redirect: 'manual', ...init });
+    // signal LAST so a caller-supplied init can't clobber the timeout.
+    return await fetch(url, { ...init, signal: ac.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function safeFetch(
+  url: string,
+  init?: RequestInit,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<Response | null> {
+  try {
+    return await fetchWithTimeout(url, { redirect: 'manual', ...init }, timeoutMs);
   } catch {
     return null;
   }
 }
 
-/** Fetch text with a cap so a giant bundle can't blow up memory. Returns '' on any failure. */
-export async function fetchText(url: string, init?: RequestInit, maxBytes = 3_000_000): Promise<string> {
+/**
+ * Fetch text with a hard timeout AND a streaming byte cap: we stop reading once maxBytes have arrived,
+ * so a gzip bomb / endless stream can't OOM the process (arrayBuffer() would buffer the whole body first).
+ * Returns '' on any failure. Binary responses are decoded lossily — callers only regex over them.
+ */
+export async function fetchText(
+  url: string,
+  init?: RequestInit,
+  maxBytes = 3_000_000,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<string> {
   try {
-    const res = await fetch(url, { redirect: 'follow', ...init });
+    const res = await fetchWithTimeout(url, { redirect: 'follow', ...init }, timeoutMs);
     if (!res.ok || !res.body) return '';
-    const buf = await res.arrayBuffer();
-    return new TextDecoder().decode(buf.slice(0, maxBytes));
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder('utf-8', { fatal: false });
+    let out = '';
+    let read = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      read += value.byteLength;
+      out += decoder.decode(value, { stream: true });
+      if (read >= maxBytes) { await reader.cancel(); break; }
+    }
+    out += decoder.decode();
+    // Memory is already bounded by the byte-counted read loop above; return as-is.
+    return out;
   } catch {
     return '';
   }

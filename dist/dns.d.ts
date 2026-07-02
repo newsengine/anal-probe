@@ -1,6 +1,6 @@
 import type { Finding, ScanContext } from './types.js';
-/** Best-effort registrable apex: last two labels. Good for `sub.example.com`; imperfect for multi-part
- *  public suffixes (`example.co.uk`) — acceptable for a zero-dep black-box check. */
+/** Registrable apex ("eTLD+1"). Handles common multi-label suffixes (`example.com.au` → itself, not
+ *  `com.au`) via a curated suffix set, falling back to the last two labels for ordinary TLDs. */
 export declare function apexOf(hostname: string): string;
 export interface DnsRecords {
     hostname: string;

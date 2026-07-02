@@ -1,0 +1,26 @@
+{
+  "baseURL": "https://app.example.com",
+  "actors": {
+    "anonymous": {},
+    "user": { "headers": { "authorization": "Bearer ${USER_TOKEN}" } },
+    "editor": { "headers": { "authorization": "Bearer ${EDITOR_TOKEN}" } },
+    "admin": { "headers": { "authorization": "Bearer ${ADMIN_TOKEN}" } }
+  },
+  "protectedEndpoints": [
+    { "name": "admin users list", "method": "GET", "path": "/api/admin/users", "allow": ["admin"] },
+    { "name": "audit logs", "method": "GET", "path": "/api/admin/audit-logs", "allow": ["admin"] },
+    { "name": "editor posts", "method": "GET", "path": "/api/editor/posts", "allow": ["editor", "admin"] },
+    { "name": "my stories (any logged-in user)", "method": "GET", "path": "/api/stories", "allow": ["user", "editor", "admin"] }
+  ],
+  "ownerScopedLists": [
+    { "name": "stories are owner-scoped", "method": "GET", "path": "/api/stories", "idRegex": "\"id\"\\s*:\\s*\"([^\"]+)\"", "userA": "user", "userB": "editor" }
+  ],
+  "massAssignment": [
+    { "name": "author_id not client-writable", "method": "POST", "path": "/api/stories", "as": "user", "body": { "title": "probe", "author_id": "FORGED-ATTACKER-ID" }, "forgedValue": "FORGED-ATTACKER-ID" },
+    { "name": "status not escalatable to published", "method": "POST", "path": "/api/stories", "as": "user", "body": { "title": "probe", "status": "published" }, "forgedValue": "\"status\":\"published\"" }
+  ],
+  "sensitiveScan": [
+    { "name": "session endpoint hides secrets", "path": "/api/auth/session", "as": "user" }
+  ],
+  "sensitiveFields": ["password", "password_hash", "access_token", "refresh_token", "service_role", "client_secret", "api_key"]
+}

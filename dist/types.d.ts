@@ -1,6 +1,6 @@
 export type Severity = 'high' | 'medium' | 'low' | 'info';
 /** Buckets a vibe coder actually cares about: "is it broken / leaking / unfindable / slow?". */
-export type Category = 'security' | 'secrets' | 'exposure' | 'dns' | 'reliability' | 'seo' | 'a11y' | 'performance';
+export type Category = 'security' | 'secrets' | 'exposure' | 'dns' | 'reliability' | 'seo' | 'a11y' | 'performance' | 'agent' | 'framework' | 'host';
 export interface Finding {
     id: string;
     category: Category;
@@ -26,6 +26,12 @@ export interface ScanOptions {
     skip?: Category[];
     /** Max same-origin links/images/scripts to fetch when checking for breakage (default 25). */
     maxCrawl?: number;
+    /** Per-request network timeout in ms (default 10000). Guards against sites that never respond. */
+    timeoutMs?: number;
+    /** Extra headers (e.g. Cookie / Authorization) sent ONLY on same-origin requests, so the scan can
+     *  reach pages behind login. Never attached to the attack-probe requests (CORS/open-redirect) or any
+     *  cross-origin fetch, to avoid leaking your session to a third party. */
+    extraHeaders?: Record<string, string>;
 }
 /** Shared, fetched-once context handed to every check so we hit the homepage a single time. */
 export interface ScanContext {
@@ -38,4 +44,7 @@ export interface ScanContext {
     html: string;
     headers: Headers;
     opts: ScanOptions;
+    /** Frameworks/platforms fingerprinted from the homepage (populated by the scanner; used by the
+     *  `framework` category and available for reporting). */
+    stacks?: import('./detect.js').StackSignal[];
 }

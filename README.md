@@ -11,9 +11,17 @@ npx github:newsengine/anal-probe https://your-app.example.com
 Built for vibe coders shipping with AI: you don't need to know what to look for — the scanner does, and
 every failing finding comes with a one-line **fix**. Exits non-zero so it doubles as a CI gate.
 
-- **Full black-box scan** — 8 categories (below), all from a URL.
-- **White-box helpers** (`idorProbe`, `checkSecurityHeaders`, `checkCookieFlags`, `scanSecrets`): import
-  into your own test suite (jest/vitest/node:test) for cross-tenant/IDOR + header/cookie/secret assertions.
+- **Full black-box scan** — 10 categories (below), all from a URL.
+- **Framework-aware**: fingerprints the stack (Next.js/WordPress/Laravel/Django/Rails/Spring/ASP.NET) and
+  runs targeted checks for its known misconfigs — only when confidently detected.
+- **Host intel** (passive): resolved IPs, reverse DNS, CDN/hosting provider — no scanning.
+- **Opt-in aggressive modes** (off by default): `recon` (authorization-gated, CDN-guarded port scan +
+  service ID — identify-only, never exploit) and `browse` (headless-browser functional check: JS errors,
+  broken images, failed requests, forms accepting input — needs `playwright-core`).
+- **White-box helpers** (`idorProbe`, `rbacProbe`, `dataIsolationProbe`, `massAssignmentProbe`,
+  `classifyTenantAccess`, `findSensitiveFields`, `checkSecurityHeaders`, `checkCookieFlags`, `scanSecrets`):
+  import into your own test suite (jest/vitest/node:test) for RBAC, cross-tenant/IDOR, mass-assignment,
+  header/cookie/secret assertions. See `examples/security-suite/` + `examples/tenant-isolation/`.
 - **Templates**: `SECURITY.md`, `security.txt`, `CODEOWNERS`.
 - **Reusable GitHub Actions workflow**: `.github/workflows/probe.yml` (call it with `uses:`).
 
@@ -38,6 +46,13 @@ on error pages, and **GraphQL introspection** left enabled.
 **SPF** + **DMARC** (with policy strength — `p=none` is only monitoring), **CAA** (restricts who can
 issue TLS certs for you), and a **dangling-CNAME → subdomain-takeover** heuristic (a CNAME pointing at
 a target that no longer resolves). All from the hostname, via DNS lookups.
+
+### 🧩 `framework` — stack-specific misconfigs
+Fingerprints the platform from headers/cookies/HTML, then (only on a **confident** match) probes that
+stack's notorious surfaces: **Next.js** secrets serialized into `__NEXT_DATA__`; **WordPress** REST
+user-enumeration + `xmlrpc.php` + `wp-config.php.bak`; **Laravel** `/telescope` + `/_ignition` (RCE);
+**Django** `DEBUG=True` error pages; **Rails** `/rails/info` + `/sidekiq`; **Spring Boot**
+`/actuator/env` + `/heapdump`; **ASP.NET** `elmah.axd` + `trace.axd`. All safe GETs, body-validated.
 
 ### 🔗 `reliability` — is it actually working?
 Homepage status, **broken same-origin links & images** (sampled HEAD/GET), and **mixed content**
@@ -66,6 +81,11 @@ gzip/brotli compression, oversized HTML, script count, long-lived cache headers 
 | Helper | What it checks |
 |---|---|
 | **`idorProbe(attacker, cases)`** | Cross-tenant / **IDOR**: authenticates as tenant B and tries to reach tenant A's resources; each case must be **denied** (401/403/404). A 2xx to the attacker is reported as a cross-tenant leak. |
+| **`rbacProbe(request, actors)`** | **Auth enforcement + RBAC**: runs one protected endpoint against several actors (anonymous / wrong-role / admin / cron-secret) and asserts each is allowed or denied as expected. |
+| **`dataIsolationProbe(request, a, b, extractIds)`** | Two users' **list** responses must share no resource ids (owner-scoped). |
+| **`massAssignmentProbe(request, forgedValue)`** | Server must **ignore a client-forged** auth-derived field (`author_id`/`status`/…). |
+| **`classifyTenantAccess({baseline, attack, control})`** + **`setTenantParam`** | Grade a multi-tenant `?tenant_uuid=` swap into isolated / leak / inspect / **inconclusive** (won't false-pass on a stale session). |
+| **`findSensitiveFields(body)`** | Response must not return `password`/`access_token`/`service_role`/… |
 | **`checkSecurityHeaders(headers, {requireEnforcedCsp?})`** | Returns problems for missing/weak **HSTS**, **`nosniff`**, **`Referrer-Policy`**, and **CSP** (enforced, or Report-Only when not required). |
 | **`checkCookieFlags(setCookie)`** | Returns problems if a cookie lacks **`Secure`**, **`HttpOnly`**, or **`SameSite`**. |
 | **`scanSecrets(text)`** | Returns redacted hits for any hardcoded secret in a string/blob (the engine the `secrets` category uses). |
@@ -77,9 +97,11 @@ anal-probe audit --level high          # fail on any high/critical advisory (def
 anal-probe audit --prod --level moderate --json
 ```
 
-> Roadmap (PRs welcome): deeper **TLS** (protocol/cipher grading, HSTS-preload eligibility) and an
-> **authenticated crawl** beyond the entry bundle. (SARIF output, baseline/diff mode, CSP linting, and
-> DNS/email hygiene have shipped.)
+> Shipped: SARIF, baseline/diff, CSP linting, DNS/email hygiene, TLS protocol/cipher grading,
+> **agent-readiness**, **host intel**, **framework check groups**, **authenticated scan**
+> (`--cookie`/`--header`), **multi-page crawl** (`--crawl`), config file + batch (`--urls`), and the
+> opt-in **`recon`** (port scan) + **`browse`** (browser-functional) modes.
+> Roadmap (PRs welcome): framework preset configs, deeper CVE-informational service ID.
 
 ## Use it in CI across all repos (recommended)
 ```yaml
@@ -132,7 +154,7 @@ node .kit/dist/cli.js https://your-deploy.example.com --baseline probe-baseline.
 
 ## Use the CLI locally / ad-hoc
 ```bash
-# full scan (all 8 categories)
+# full scan (all 10 categories)
 npx github:newsengine/anal-probe https://app.example.com
 
 # scope it, gate harder, test CORS, machine-readable output

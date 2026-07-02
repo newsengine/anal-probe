@@ -13,7 +13,10 @@ export type Category =
   | 'reliability'  // broken links/images, 500s, stack-trace leaks, mixed content
   | 'seo'          // title/description/canonical/robots/sitemap
   | 'a11y'         // lang, alt text, labels, viewport
-  | 'performance'; // compression, caching, page weight
+  | 'performance'  // compression, caching, page weight
+  | 'agent'        // agent-readiness: llms.txt, AI-crawler policy, SSR content, structured data
+  | 'framework'    // stack-specific misconfigs (Next.js/WordPress/Laravel/Django/Rails/Spring/ASP.NET)
+  | 'host';        // passive infra intel: resolved IP(s), reverse DNS, CDN/hosting provider (no scanning)
 
 export interface Finding {
   id: string;
@@ -41,6 +44,12 @@ export interface ScanOptions {
   skip?: Category[];
   /** Max same-origin links/images/scripts to fetch when checking for breakage (default 25). */
   maxCrawl?: number;
+  /** Per-request network timeout in ms (default 10000). Guards against sites that never respond. */
+  timeoutMs?: number;
+  /** Extra headers (e.g. Cookie / Authorization) sent ONLY on same-origin requests, so the scan can
+   *  reach pages behind login. Never attached to the attack-probe requests (CORS/open-redirect) or any
+   *  cross-origin fetch, to avoid leaking your session to a third party. */
+  extraHeaders?: Record<string, string>;
 }
 
 /** Shared, fetched-once context handed to every check so we hit the homepage a single time. */
@@ -54,4 +63,7 @@ export interface ScanContext {
   html: string;
   headers: Headers;
   opts: ScanOptions;
+  /** Frameworks/platforms fingerprinted from the homepage (populated by the scanner; used by the
+   *  `framework` category and available for reporting). */
+  stacks?: import('./detect.js').StackSignal[];
 }

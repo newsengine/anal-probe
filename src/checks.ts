@@ -5,7 +5,8 @@
 
 import type { Finding, ScanContext, Severity } from './types.js';
 import {
-  safeFetch, fetchText, headerGet, resolveUrl, sameOrigin, html as H, scanSecrets, tlsCertDaysRemaining,
+  safeFetch, fetchText, headerGet, resolveUrl, sameOrigin, html as H, scanSecrets,
+  tlsProbe, gradeTlsProtocol, gradeTlsCipher,
 } from './core.js';
 
 const f = (
@@ -47,8 +48,10 @@ export function lintCsp(policy: string): CspIssue[] {
   if (scriptSrc.some((s) => s === '*' || /^https?:$/i.test(s) || s === 'data:')) {
     issues.push({ id: 'csp.wildcard-script', title: 'CSP script source is a wildcard', severity: 'high', detail: `script-src allows a wildcard source (${scriptSrc.find((s) => s === '*' || /^https?:$/i.test(s) || s === 'data:')}) — any host can supply scripts`, fix: 'Pin script-src to specific trusted origins (or self + nonces), not * / https: / data:.' });
   }
-  if (!d.has('object-src') || !has(d.get('object-src')!, "'none'")) {
-    issues.push({ id: 'csp.object-src', title: "CSP missing object-src 'none'", severity: 'low', detail: 'without object-src \'none\', legacy plugin vectors (<object>/<embed>) remain open', fix: "Add object-src 'none'." });
+  // object-src falls back to default-src (CSP semantics): default-src 'none' already locks plugins down.
+  const objectSrc = d.get('object-src') ?? d.get('default-src') ?? [];
+  if (!has(objectSrc, "'none'")) {
+    issues.push({ id: 'csp.object-src', title: "CSP missing object-src 'none'", severity: 'low', detail: 'without object-src \'none\' (or a default-src \'none\' fallback), legacy plugin vectors (<object>/<embed>) remain open', fix: "Add object-src 'none' (or default-src 'none')." });
   }
   if (!d.has('base-uri')) {
     issues.push({ id: 'csp.base-uri', title: 'CSP missing base-uri', severity: 'low', detail: 'without base-uri, an injected <base> tag can hijack relative URLs', fix: "Add base-uri 'self' (or 'none')." });
@@ -64,6 +67,7 @@ const REQUIRED_HEADERS: { name: string; severity: Severity; validate?: (v: strin
   { name: 'referrer-policy', severity: 'low', hint: 'e.g. strict-origin-when-cross-origin', fix: 'Send Referrer-Policy: strict-origin-when-cross-origin' },
   { name: 'x-frame-options', severity: 'medium', hint: 'SAMEORIGIN/DENY or CSP frame-ancestors', fix: 'Send X-Frame-Options: SAMEORIGIN (or a CSP frame-ancestors directive)' },
   { name: 'content-security-policy', severity: 'high', hint: 'a Content-Security-Policy (enforced)', fix: 'Add a Content-Security-Policy header to stop injected scripts' },
+  { name: 'permissions-policy', severity: 'low', hint: 'a Permissions-Policy locking down camera/mic/geolocation', fix: 'Send a Permissions-Policy header (e.g. camera=(), microphone=(), geolocation=()) to disable powerful APIs you don\'t use' },
 ];
 
 export async function securityChecks(ctx: ScanContext): Promise<Finding[]> {
@@ -103,6 +107,18 @@ export async function securityChecks(ctx: ScanContext): Promise<Finding[]> {
     out.push(f('security', `header.${req.name}`, present ? `Header ${req.name}${valid ? '' : ' (weak)'}` : `Missing ${req.name}`, req.severity, valid, present ? `${req.name}: ${val}`.slice(0, 200) : `expected ${req.hint}`, req.fix));
   }
 
+  // HSTS preload eligibility: present-but-not-preloadable is a common near-miss. Only nudge if HSTS is set.
+  const hsts = h.get('strict-transport-security') || '';
+  if (hsts) {
+    const maxAge = Number(hsts.match(/max-age=(\d+)/i)?.[1] || 0);
+    const eligible = maxAge >= 31_536_000 && /includesubdomains/i.test(hsts) && /preload/i.test(hsts);
+    out.push(f('security', 'tls.hsts-preload', eligible ? 'HSTS is preload-eligible' : 'HSTS not preload-eligible', 'low', eligible, eligible ? 'max-age≥1y + includeSubDomains + preload' : `has HSTS but ${maxAge < 31_536_000 ? 'max-age<1y' : ''}${!/includesubdomains/i.test(hsts) ? ' no includeSubDomains' : ''}${!/preload/i.test(hsts) ? ' no preload token' : ''}`.trim(), eligible ? undefined : 'For hstspreload.org eligibility send: Strict-Transport-Security: max-age=31536000; includeSubDomains; preload'));
+  }
+
+  // Cross-Origin-Opener-Policy: cheap isolation win against cross-window attacks (Spectre/XS-Leaks).
+  const coop = h.get('cross-origin-opener-policy');
+  out.push(f('security', 'header.cross-origin-opener-policy', coop ? 'Has Cross-Origin-Opener-Policy' : 'No Cross-Origin-Opener-Policy', 'low', !!coop, coop ? `cross-origin-opener-policy: ${coop}` : 'no COOP header', coop ? undefined : 'Send Cross-Origin-Opener-Policy: same-origin to isolate your window from cross-origin popups.'));
+
   // CSP linting: grade the policy that IS set (enforced, or Report-Only when the caller accepts it).
   const cspToLint = h.get('content-security-policy') || (ctx.opts.allowReportOnlyCsp ? h.get('content-security-policy-report-only') : null);
   if (cspToLint) {
@@ -137,7 +153,7 @@ export async function securityChecks(ctx: ScanContext): Promise<Finding[]> {
 
   // security.txt
   const stPath = ctx.opts.securityTxtPath || '/.well-known/security.txt';
-  const st = await safeFetch(origin + stPath, { redirect: 'follow' });
+  const st = await safeFetch(origin + stPath, { redirect: 'follow', headers: ctx.opts.extraHeaders });
   if (st && st.ok) {
     const body = await st.text();
     const ok = /^contact:/im.test(body) && /^expires:/im.test(body);
@@ -158,14 +174,23 @@ export async function securityChecks(ctx: ScanContext): Promise<Finding[]> {
     }
   }
 
-  // TLS certificate expiry (https only) — reads the served cert via a raw TLS socket.
+  // TLS: cert expiry + protocol/cipher grading (https only) — reads the served cert via a raw TLS socket.
   if (url.protocol === 'https:') {
-    const days = await tlsCertDaysRemaining(url.hostname, Number(url.port) || 443);
+    const tlsInfo = await tlsProbe(url.hostname, Number(url.port) || 443);
+    const days = tlsInfo.daysRemaining;
     if (days === null) {
       out.push(f('security', 'tls.expiry', 'TLS cert expiry not determinable', 'info', true, 'could not read the peer certificate'));
     } else {
       const sev: Severity = days < 14 ? 'high' : days < 30 ? 'medium' : 'low';
       out.push(f('security', 'tls.expiry', `TLS cert expires in ${days} day(s)`, sev, days >= 14, days < 14 ? 'certificate expires very soon — renew now' : `${days} days remaining`, days >= 30 ? undefined : 'Renew the TLS certificate (or enable auto-renewal — Let\'s Encrypt/most hosts do this for you).'));
+    }
+    // Deprecated protocol (TLS 1.0/1.1/SSLv3) — the modern high-value TLS finding.
+    const proto = gradeTlsProtocol(tlsInfo.protocol);
+    out.push(f('security', 'tls.protocol', proto.ok ? `TLS protocol ${tlsInfo.protocol ?? '(unknown)'}` : `Deprecated TLS protocol ${tlsInfo.protocol}`, proto.severity, proto.ok, proto.detail, proto.ok ? undefined : 'Disable TLS 1.0/1.1 (and SSLv3) at the host/load-balancer — require TLS 1.2+ (ideally 1.3).'));
+    // Weak cipher suite.
+    const cipher = gradeTlsCipher(tlsInfo.cipher);
+    if (tlsInfo.cipher) {
+      out.push(f('security', 'tls.cipher', cipher.ok ? `TLS cipher ${tlsInfo.cipher}` : `Weak TLS cipher ${tlsInfo.cipher}`, 'medium', cipher.ok, cipher.detail, cipher.ok ? undefined : 'Disable weak/legacy ciphers (RC4/3DES/CBC/MD5/EXPORT) — prefer AEAD suites (AES-GCM / ChaCha20-Poly1305).'));
     }
   }
 
@@ -190,7 +215,7 @@ export async function securityChecks(ctx: ScanContext): Promise<Finding[]> {
     const r = await safeFetch(`${origin}/?${p}=${encodeURIComponent(evilRedirect)}`, { redirect: 'manual' });
     if (r && r.status >= 300 && r.status < 400) {
       const loc = r.headers.get('location') || '';
-      if (/^https?:\/\/evil\.example/i.test(loc) || loc.startsWith('//evil.example')) { openRedirectParam = p; break; }
+      if (/^(?:https?:)?\/\/evil\.example/i.test(loc)) { openRedirectParam = p; break; }
     }
   }
   out.push(f('security', 'open-redirect', openRedirectParam ? `Open redirect via ?${openRedirectParam}` : 'No open redirect on common params', 'high', !openRedirectParam, openRedirectParam ? `?${openRedirectParam}= redirects off-domain to an attacker URL` : 'common redirect params do not redirect off-domain', openRedirectParam ? 'Validate redirect targets against an allow-list of your own paths — never redirect to an arbitrary user-supplied URL.' : undefined));
@@ -222,7 +247,7 @@ export async function secretChecks(ctx: ScanContext): Promise<Finding[]> {
 
   let mapExposed = 0;
   for (const src of scripts) {
-    const text = await fetchText(src);
+    const text = await fetchText(src, { headers: ctx.opts.extraHeaders });
     if (!text) continue;
     blobs.push({ where: src.replace(ctx.origin, ''), text });
     // Source map exposure → the app's original (unminified) source is downloadable.
@@ -257,9 +282,11 @@ export async function secretChecks(ctx: ScanContext): Promise<Finding[]> {
 // Each probe validates the BODY, not just a 200 — SPAs return 200 + index.html for unknown paths, so
 // a naive status check would false-positive on every single one.
 const EXPOSED_PATHS: { path: string; severity: Severity; looksReal: (body: string, ct: string) => boolean; label: string }[] = [
-  { path: '/.env', severity: 'high', label: '.env file', looksReal: (b) => /^[A-Z0-9_]+\s*=/m.test(b) && !/<html/i.test(b) },
-  { path: '/.env.local', severity: 'high', label: '.env.local', looksReal: (b) => /^[A-Z0-9_]+\s*=/m.test(b) && !/<html/i.test(b) },
-  { path: '/.env.production', severity: 'high', label: '.env.production', looksReal: (b) => /^[A-Z0-9_]+\s*=/m.test(b) && !/<html/i.test(b) },
+  // Match KEY= at line start for any case (Flask/Django use lowercase like `debug_mode=true`), but still
+  // reject an SPA's index.html catch-all.
+  { path: '/.env', severity: 'high', label: '.env file', looksReal: (b) => /^[A-Za-z_][A-Za-z0-9_]*\s*=/m.test(b) && !/<html/i.test(b) },
+  { path: '/.env.local', severity: 'high', label: '.env.local', looksReal: (b) => /^[A-Za-z_][A-Za-z0-9_]*\s*=/m.test(b) && !/<html/i.test(b) },
+  { path: '/.env.production', severity: 'high', label: '.env.production', looksReal: (b) => /^[A-Za-z_][A-Za-z0-9_]*\s*=/m.test(b) && !/<html/i.test(b) },
   { path: '/.git/config', severity: 'high', label: '.git/config', looksReal: (b) => /\[core\]|\[remote/i.test(b) },
   { path: '/.git/HEAD', severity: 'high', label: '.git/HEAD', looksReal: (b) => /^ref:\s/m.test(b) },
   { path: '/wrangler.toml', severity: 'high', label: 'wrangler.toml', looksReal: (b) => /compatibility_date|^name\s*=/m.test(b) },
@@ -268,13 +295,33 @@ const EXPOSED_PATHS: { path: string; severity: Severity; looksReal: (body: strin
   { path: '/docker-compose.yml', severity: 'medium', label: 'docker-compose.yml', looksReal: (b) => /^services:/m.test(b) },
   { path: '/.DS_Store', severity: 'low', label: '.DS_Store', looksReal: (b) => b.startsWith('\x00\x00\x00\x01Bud1') || /Bud1/.test(b.slice(0, 8)) },
   { path: '/backup.sql', severity: 'high', label: 'backup.sql', looksReal: (b) => /(CREATE TABLE|INSERT INTO)/i.test(b) },
+  // Framework debug/admin surfaces that ship on by accident. Each body-validates so a generic 200/SPA
+  // index doesn't false-positive.
+  { path: '/actuator/health', severity: 'high', label: 'Spring Boot actuator', looksReal: (b, ct) => ct.includes('json') && /"status"\s*:\s*"(?:UP|DOWN|OUT_OF_SERVICE)"/i.test(b) },
+  { path: '/server-status', severity: 'medium', label: 'Apache server-status', looksReal: (b) => /Apache Server Status/i.test(b) },
+  { path: '/debug/vars', severity: 'high', label: 'Go expvar debug endpoint', looksReal: (b, ct) => ct.includes('json') && /"cmdline"|"memstats"/.test(b) },
+  { path: '/metrics', severity: 'medium', label: 'Prometheus metrics', looksReal: (b, ct) => /^#\s*(HELP|TYPE)\s/m.test(b) && !/<html/i.test(b) && (ct.includes('text') || ct === '') },
+  { path: '/swagger.json', severity: 'medium', label: 'Swagger/OpenAPI spec', looksReal: (b, ct) => ct.includes('json') && /"(?:swagger|openapi)"\s*:/.test(b) },
+  { path: '/api-docs', severity: 'medium', label: 'Swagger/OpenAPI docs', looksReal: (b) => /swagger-ui|"(?:swagger|openapi)"\s*:/i.test(b) },
+  { path: '/.aws/credentials', severity: 'high', label: 'AWS credentials file', looksReal: (b) => /aws_access_key_id/i.test(b) && !/<html/i.test(b) },
+  { path: '/config.json', severity: 'medium', label: 'config.json', looksReal: (b, ct) => ct.includes('json') && /"(?:apiKey|secret|password|token|database|db)"/i.test(b) },
 ];
+
+// Directories that are commonly mis-served with autoindex on, leaking internal file structure.
+const LISTABLE_DIRS = ['/uploads/', '/files/', '/backup/', '/backups/', '/.git/', '/static/', '/assets/', '/data/'];
+// A real Apache/nginx/generic autoindex page — NOT an SPA index (which has a root mount div + script bundle).
+function looksLikeDirListing(body: string): boolean {
+  if (/<div[^>]*\bid=["'](?:root|app|__next)["']/i.test(body)) return false;
+  return /<title>Index of \//i.test(body)
+    || /Directory listing for \//i.test(body)
+    || (/<a[^>]+href=["'][^"']*\/["']/i.test(body) && /Parent Directory|<pre>/i.test(body));
+}
 
 export async function exposureChecks(ctx: ScanContext): Promise<Finding[]> {
   const out: Finding[] = [];
   let any = false;
   for (const p of EXPOSED_PATHS) {
-    const res = await safeFetch(ctx.origin + p.path, { redirect: 'follow' });
+    const res = await safeFetch(ctx.origin + p.path, { redirect: 'follow', headers: ctx.opts.extraHeaders });
     if (!res || !res.ok) continue;
     const ct = (res.headers.get('content-type') || '').toLowerCase();
     const body = (await res.text()).slice(0, 4000);
@@ -284,8 +331,49 @@ export async function exposureChecks(ctx: ScanContext): Promise<Finding[]> {
     }
   }
 
+  // Directory listing (autoindex) on common dirs — leaks internal structure / stray files.
+  for (const dir of LISTABLE_DIRS) {
+    const res = await safeFetch(ctx.origin + dir, { redirect: 'follow', headers: ctx.opts.extraHeaders });
+    if (!res || !res.ok) continue;
+    const body = (await res.text()).slice(0, 6000);
+    if (looksLikeDirListing(body)) {
+      any = true;
+      out.push(f('exposure', `dir-listing${dir}`, `Directory listing enabled at ${dir}`, 'medium', false, `GET ${dir} returns an auto-generated index of files`, `Turn off directory autoindex for ${dir} (nginx: autoindex off; Apache: Options -Indexes) so your file structure isn't browsable.`));
+    }
+  }
+
+  // robots.txt that Disallows sensitive-looking paths advertises exactly where the interesting stuff is.
+  const robots = await safeFetch(ctx.origin + '/robots.txt', { redirect: 'follow', headers: ctx.opts.extraHeaders });
+  if (robots && robots.ok) {
+    const body = (await robots.text()).slice(0, 8000);
+    const sensitive = [...body.matchAll(/^\s*Disallow:\s*(\S+)/gim)]
+      .map((m) => m[1])
+      .filter((p) => /admin|internal|private|secret|backup|config|\.git|staging|test|debug|api\/|dashboard|wp-admin/i.test(p));
+    if (sensitive.length) {
+      out.push(f('exposure', 'robots.sensitive', 'robots.txt discloses sensitive paths', 'low', false, `Disallow entries point at ${sensitive.slice(0, 5).join(', ')}`, 'Don\'t list secret paths in robots.txt — it\'s public and tells attackers where to look. Protect those paths with auth instead.'));
+      any = true;
+    }
+  }
+
+  // Debug/introspection endpoints that echo server secrets (service-role keys, tokens, password hashes).
+  // Safe GETs; body-validated so an SPA/HTML fallback or a normal JSON response doesn't false-positive.
+  // Require a real JSON key→value (or a full key/hash), so docs that merely mention "password_hash" or a
+  // schema field name don't false-positive; only actual leaked VALUES trigger it.
+  const SECRET_IN_BODY = /"(?:service_role|SUPABASE_SERVICE_ROLE_KEY|CRON_SECRET|STRIPE_SECRET(?:_KEY)?|password_hash|encrypted_password|access_token|refresh_token|client_secret)"\s*:\s*"?[^"\s,}]{6,}|\$2[aby]\$[.\/A-Za-z0-9]{20,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\brole"\s*:\s*"service_role"/i;
+  for (const dbg of ['/api/auth/debug', '/api/debug', '/api/_debug', '/api/auth/check', '/api/config', '/api/env']) {
+    const res = await safeFetch(ctx.origin + dbg, { redirect: 'follow', headers: ctx.opts.extraHeaders });
+    if (!res || !res.ok) continue;
+    const body = (await res.text()).slice(0, 8000);
+    if (/<html/i.test(body)) continue; // SPA catch-all, not a real debug endpoint
+    if (SECRET_IN_BODY.test(body)) {
+      any = true;
+      out.push(f('exposure', `debug-leak${dbg}`, 'Debug endpoint leaks secrets/credentials', 'high', false, `${dbg} returns a body containing service-role keys, tokens, or password hashes`, 'Remove or lock down debug/introspection endpoints — never return service-role keys, session tokens, or password hashes to a client.'));
+      break;
+    }
+  }
+
   // Verbose error / stack-trace leak on an unknown path.
-  const probe404 = await safeFetch(ctx.origin + '/__anal_probe_does_not_exist__', { redirect: 'follow' });
+  const probe404 = await safeFetch(ctx.origin + '/__anal_probe_does_not_exist__', { redirect: 'follow', headers: ctx.opts.extraHeaders });
   if (probe404) {
     const body = (await probe404.text()).slice(0, 8000);
     const leak = /\bat\s+[\w$.]+\s+\(.*:\d+:\d+\)|Traceback \(most recent call last\)|node_modules\/|\/var\/task\/|ECONNREFUSED|Sequelize\w+Error|PG::|psql:/.test(body);
@@ -295,13 +383,11 @@ export async function exposureChecks(ctx: ScanContext): Promise<Finding[]> {
     }
   }
 
-  // GraphQL introspection enabled (leaks the whole API schema).
+  // GraphQL introspection enabled (leaks the whole API schema). Sent as a GET introspection query so the
+  // scan stays purely GET (the query is read-only; GET introspection is supported by most GraphQL servers).
+  const gqlQuery = '?query=' + encodeURIComponent('{__schema{queryType{name}}}');
   for (const gqlPath of ['/graphql', '/api/graphql']) {
-    const res = await safeFetch(ctx.origin + gqlPath, {
-      method: 'POST', redirect: 'follow',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ query: '{__schema{queryType{name}}}' }),
-    });
+    const res = await safeFetch(ctx.origin + gqlPath + gqlQuery, { redirect: 'follow', headers: { accept: 'application/json', ...ctx.opts.extraHeaders } });
     if (res && res.ok) {
       const body = await res.text();
       if (/"__schema"|"queryType"/.test(body)) {
@@ -343,8 +429,8 @@ export async function reliabilityChecks(ctx: ScanContext): Promise<Finding[]> {
 
   const broken: string[] = [];
   for (const t of targets) {
-    let res = await safeFetch(t, { method: 'HEAD', redirect: 'follow' });
-    if (res && (res.status === 405 || res.status === 501)) res = await safeFetch(t, { method: 'GET', redirect: 'follow' });
+    let res = await safeFetch(t, { method: 'HEAD', redirect: 'follow', headers: ctx.opts.extraHeaders });
+    if (res && (res.status === 405 || res.status === 501)) res = await safeFetch(t, { method: 'GET', redirect: 'follow', headers: ctx.opts.extraHeaders });
     if (res && res.status >= 400) broken.push(`${res.status} ${t.replace(ctx.origin, '')}`);
   }
   if (broken.length) {

@@ -1,11 +1,37 @@
+export interface TlsInfo {
+    /** Days until the served certificate expires (null if undeterminable). */
+    daysRemaining: number | null;
+    /** Negotiated protocol, e.g. "TLSv1.3" / "TLSv1.2" / "TLSv1" (null if undeterminable). */
+    protocol: string | null;
+    /** Negotiated cipher suite name (null if undeterminable). */
+    cipher: string | null;
+}
 /**
- * Days until the served TLS certificate expires (null if it can't be determined). Uses a raw TLS
- * connection because fetch() doesn't expose the peer certificate.
+ * Probe the served TLS: cert expiry + negotiated protocol + cipher. Uses a raw TLS connection because
+ * fetch() exposes none of this. Fails soft to nulls.
  */
+export declare function tlsProbe(host: string, port?: number): Promise<TlsInfo>;
+/** Back-compat wrapper — days until the served cert expires. */
 export declare function tlsCertDaysRemaining(host: string, port?: number): Promise<number | null>;
-export declare function safeFetch(url: string, init?: RequestInit): Promise<Response | null>;
-/** Fetch text with a cap so a giant bundle can't blow up memory. Returns '' on any failure. */
-export declare function fetchText(url: string, init?: RequestInit, maxBytes?: number): Promise<string>;
+/** Grade a negotiated TLS protocol. Pure/testable. */
+export declare function gradeTlsProtocol(protocol: string | null): {
+    ok: boolean;
+    severity: 'high' | 'medium' | 'low' | 'info';
+    detail: string;
+};
+/** Flag known-weak cipher suites. Pure/testable. */
+export declare function gradeTlsCipher(cipher: string | null): {
+    ok: boolean;
+    detail: string;
+};
+export declare const DEFAULT_TIMEOUT_MS = 10000;
+export declare function safeFetch(url: string, init?: RequestInit, timeoutMs?: number): Promise<Response | null>;
+/**
+ * Fetch text with a hard timeout AND a streaming byte cap: we stop reading once maxBytes have arrived,
+ * so a gzip bomb / endless stream can't OOM the process (arrayBuffer() would buffer the whole body first).
+ * Returns '' on any failure. Binary responses are decoded lossily — callers only regex over them.
+ */
+export declare function fetchText(url: string, init?: RequestInit, maxBytes?: number, timeoutMs?: number): Promise<string>;
 export declare function headerGet(h: Headers | Record<string, string>, name: string): string | null;
 /** Resolve a possibly-relative href against the page origin; null if it can't be parsed. */
 export declare function resolveUrl(base: string, href: string): string | null;
