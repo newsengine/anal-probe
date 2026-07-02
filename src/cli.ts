@@ -62,7 +62,7 @@ async function main() {
 
   const rawUrl = process.argv[2];
   if (!rawUrl || rawUrl.startsWith('-')) {
-    console.error('usage:\n  npx github:newsengine/anal-probe <url> [--only ...] [--skip ...] [--cors-path <p>] [--rate-limit-path <p>] [--timeout <ms>] [--fail-on high|medium|any] [--json] [--quiet]\n  npx github:newsengine/anal-probe audit [--prod] [--level low|moderate|high|critical] [--json]');
+    console.error('usage:\n  npx github:newsengine/anal-probe <url> [--only ...] [--skip ...] [--cors-path <p>] [--rate-limit-path <p>] [--timeout <ms>] [--cookie "<raw cookie>"] [--header "K: V"] [--fail-on high|medium|any] [--json] [--quiet]\n  npx github:newsengine/anal-probe audit [--prod] [--level low|moderate|high|critical] [--json]');
     process.exit(2);
   }
   const url = normalizeUrl(rawUrl); // accept bare domains (example.com -> https://example.com)
@@ -77,6 +77,21 @@ async function main() {
     return n;
   };
 
+  // Auth for scanning behind login: --cookie "<raw cookie header>" and/or repeatable --header "K: V".
+  // These are sent ONLY on same-origin requests (see ScanOptions.extraHeaders).
+  const extraHeaders: Record<string, string> = {};
+  const cookie = arg('--cookie');
+  if (cookie) extraHeaders['cookie'] = cookie;
+  for (let i = 0; i < process.argv.length; i++) {
+    if (process.argv[i] === '--header') {
+      const raw = process.argv[i + 1] || '';
+      const idx = raw.indexOf(':');
+      if (idx > 0) extraHeaders[raw.slice(0, idx).trim().toLowerCase()] = raw.slice(idx + 1).trim();
+      else { console.error(`--header must be "Name: value" (got "${raw}")`); process.exit(2); }
+    }
+  }
+  const hasAuth = Object.keys(extraHeaders).length > 0;
+
   const findings = await probe(url, {
     only: list(arg('--only')),
     skip: list(arg('--skip')),
@@ -85,6 +100,7 @@ async function main() {
     allowReportOnlyCsp: flag('--allow-report-only-csp'),
     maxCrawl: arg('--max-crawl') ? num('--max-crawl', 25) : undefined,
     timeoutMs: arg('--timeout') ? num('--timeout', 10_000) : undefined,
+    extraHeaders: hasAuth ? extraHeaders : undefined,
   });
   const sum = summarize(findings);
 
@@ -118,7 +134,7 @@ async function main() {
   } else {
     // --quiet: show only failures (good for CI logs); default shows passes too so a clean scan is visible.
     const quiet = flag('--quiet');
-    console.log(`\n🔬 anal-probe — full app scan of ${url}\n`);
+    console.log(`\n🔬 anal-probe — full app scan of ${url}${hasAuth ? ' (authenticated)' : ''}\n`);
     for (const cat of ALL_CATEGORIES) {
       const group = findings.filter((f) => f.category === cat);
       if (!group.length) continue;

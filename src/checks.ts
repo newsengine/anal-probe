@@ -152,7 +152,7 @@ export async function securityChecks(ctx: ScanContext): Promise<Finding[]> {
 
   // security.txt
   const stPath = ctx.opts.securityTxtPath || '/.well-known/security.txt';
-  const st = await safeFetch(origin + stPath, { redirect: 'follow' });
+  const st = await safeFetch(origin + stPath, { redirect: 'follow', headers: ctx.opts.extraHeaders });
   if (st && st.ok) {
     const body = await st.text();
     const ok = /^contact:/im.test(body) && /^expires:/im.test(body);
@@ -237,7 +237,7 @@ export async function secretChecks(ctx: ScanContext): Promise<Finding[]> {
 
   let mapExposed = 0;
   for (const src of scripts) {
-    const text = await fetchText(src);
+    const text = await fetchText(src, { headers: ctx.opts.extraHeaders });
     if (!text) continue;
     blobs.push({ where: src.replace(ctx.origin, ''), text });
     // Source map exposure → the app's original (unminified) source is downloadable.
@@ -311,7 +311,7 @@ export async function exposureChecks(ctx: ScanContext): Promise<Finding[]> {
   const out: Finding[] = [];
   let any = false;
   for (const p of EXPOSED_PATHS) {
-    const res = await safeFetch(ctx.origin + p.path, { redirect: 'follow' });
+    const res = await safeFetch(ctx.origin + p.path, { redirect: 'follow', headers: ctx.opts.extraHeaders });
     if (!res || !res.ok) continue;
     const ct = (res.headers.get('content-type') || '').toLowerCase();
     const body = (await res.text()).slice(0, 4000);
@@ -323,7 +323,7 @@ export async function exposureChecks(ctx: ScanContext): Promise<Finding[]> {
 
   // Directory listing (autoindex) on common dirs — leaks internal structure / stray files.
   for (const dir of LISTABLE_DIRS) {
-    const res = await safeFetch(ctx.origin + dir, { redirect: 'follow' });
+    const res = await safeFetch(ctx.origin + dir, { redirect: 'follow', headers: ctx.opts.extraHeaders });
     if (!res || !res.ok) continue;
     const body = (await res.text()).slice(0, 6000);
     if (looksLikeDirListing(body)) {
@@ -333,7 +333,7 @@ export async function exposureChecks(ctx: ScanContext): Promise<Finding[]> {
   }
 
   // robots.txt that Disallows sensitive-looking paths advertises exactly where the interesting stuff is.
-  const robots = await safeFetch(ctx.origin + '/robots.txt', { redirect: 'follow' });
+  const robots = await safeFetch(ctx.origin + '/robots.txt', { redirect: 'follow', headers: ctx.opts.extraHeaders });
   if (robots && robots.ok) {
     const body = (await robots.text()).slice(0, 8000);
     const sensitive = [...body.matchAll(/^\s*Disallow:\s*(\S+)/gim)]
@@ -346,7 +346,7 @@ export async function exposureChecks(ctx: ScanContext): Promise<Finding[]> {
   }
 
   // Verbose error / stack-trace leak on an unknown path.
-  const probe404 = await safeFetch(ctx.origin + '/__anal_probe_does_not_exist__', { redirect: 'follow' });
+  const probe404 = await safeFetch(ctx.origin + '/__anal_probe_does_not_exist__', { redirect: 'follow', headers: ctx.opts.extraHeaders });
   if (probe404) {
     const body = (await probe404.text()).slice(0, 8000);
     const leak = /\bat\s+[\w$.]+\s+\(.*:\d+:\d+\)|Traceback \(most recent call last\)|node_modules\/|\/var\/task\/|ECONNREFUSED|Sequelize\w+Error|PG::|psql:/.test(body);
@@ -360,7 +360,7 @@ export async function exposureChecks(ctx: ScanContext): Promise<Finding[]> {
   for (const gqlPath of ['/graphql', '/api/graphql']) {
     const res = await safeFetch(ctx.origin + gqlPath, {
       method: 'POST', redirect: 'follow',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...ctx.opts.extraHeaders },
       body: JSON.stringify({ query: '{__schema{queryType{name}}}' }),
     });
     if (res && res.ok) {
@@ -404,8 +404,8 @@ export async function reliabilityChecks(ctx: ScanContext): Promise<Finding[]> {
 
   const broken: string[] = [];
   for (const t of targets) {
-    let res = await safeFetch(t, { method: 'HEAD', redirect: 'follow' });
-    if (res && (res.status === 405 || res.status === 501)) res = await safeFetch(t, { method: 'GET', redirect: 'follow' });
+    let res = await safeFetch(t, { method: 'HEAD', redirect: 'follow', headers: ctx.opts.extraHeaders });
+    if (res && (res.status === 405 || res.status === 501)) res = await safeFetch(t, { method: 'GET', redirect: 'follow', headers: ctx.opts.extraHeaders });
     if (res && res.status >= 400) broken.push(`${res.status} ${t.replace(ctx.origin, '')}`);
   }
   if (broken.length) {

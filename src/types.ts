@@ -44,6 +44,10 @@ export interface ScanOptions {
   maxCrawl?: number;
   /** Per-request network timeout in ms (default 10000). Guards against sites that never respond. */
   timeoutMs?: number;
+  /** Extra headers (e.g. Cookie / Authorization) sent ONLY on same-origin requests, so the scan can
+   *  reach pages behind login. Never attached to the attack-probe requests (CORS/open-redirect) or any
+   *  cross-origin fetch, to avoid leaking your session to a third party. */
+  extraHeaders?: Record<string, string>;
 }
 
 /** Shared, fetched-once context handed to every check so we hit the homepage a single time. */

@@ -31,7 +31,7 @@ async function buildContext(baseUrl, opts) {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? 10_000);
     try {
-        res = await fetch(url.origin, { redirect: 'follow', signal: ac.signal });
+        res = await fetch(url.origin, { redirect: 'follow', signal: ac.signal, headers: opts.extraHeaders });
         headers = res.headers;
         if ((res.headers.get('content-type') || '').includes('html')) {
             html = (await res.text()).slice(0, 5_000_000);

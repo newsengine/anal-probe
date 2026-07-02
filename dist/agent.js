@@ -93,7 +93,8 @@ export function evaluateAgentReadiness(inp) {
 export async function agentChecks(ctx) {
     if (!ctx.res)
         return [];
-    const llmsRes = await safeFetch(ctx.origin + '/llms.txt', { redirect: 'follow' });
+    const auth = ctx.opts.extraHeaders;
+    const llmsRes = await safeFetch(ctx.origin + '/llms.txt', { redirect: 'follow', headers: auth });
     let hasLlmsTxt = false;
     if (llmsRes && llmsRes.ok) {
         const ct = (llmsRes.headers.get('content-type') || '').toLowerCase();
@@ -101,12 +102,12 @@ export async function agentChecks(ctx) {
         // Accept text/markdown; reject an SPA HTML catch-all masquerading as llms.txt.
         hasLlmsTxt = !/<html/i.test(body) && (ct.includes('text') || ct.includes('markdown') || body.trim().length > 0);
     }
-    const robotsRes = await safeFetch(ctx.origin + '/robots.txt', { redirect: 'follow' });
+    const robotsRes = await safeFetch(ctx.origin + '/robots.txt', { redirect: 'follow', headers: auth });
     const robotsPresent = !!(robotsRes && robotsRes.ok);
     const robotsTxt = robotsPresent ? (await robotsRes.text()).slice(0, 20_000) : '';
     let hasAgentManifest = false;
     for (const p of ['/.well-known/ai-plugin.json', '/.well-known/mcp.json', '/.well-known/mcp']) {
-        const r = await safeFetch(ctx.origin + p, { redirect: 'follow' });
+        const r = await safeFetch(ctx.origin + p, { redirect: 'follow', headers: auth });
         if (r && r.ok) {
             const body = (await r.text()).slice(0, 1000);
             if (!/<html/i.test(body)) {

@@ -479,3 +479,25 @@ test('probe runs the agent category end-to-end', async () => {
   assert.ok(findings.find((f) => f.id === 'agent.ssr-content' && f.pass), 'detects server-rendered content');
   assert.ok(findings.find((f) => f.id === 'agent.ai-crawlers' && f.pass), 'detects open crawler policy');
 });
+
+// ═══════════════════════ authenticated scan (#7) ════════════════════════════
+
+test('extraHeaders are sent on same-origin requests (scan behind login)', async () => {
+  let sawAuthOnHome = false;
+  let sawAuthOnEnv = false;
+  const srv = await server((req, res) => {
+    const authed = req.headers['cookie'] === 'session=secret';
+    if (req.url === '/') { sawAuthOnHome ||= authed; res.writeHead(200, { 'content-type': 'text/html' }); res.end('<html><body>home</body></html>'); return; }
+    if (req.url === '/.env') {
+      sawAuthOnEnv ||= authed;
+      // Only serve the secret file to an authenticated request (simulating a page behind login).
+      if (authed) { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('SECRET_KEY=abc123\n'); return; }
+      res.writeHead(401); res.end('unauthorized'); return;
+    }
+    res.writeHead(404); res.end('nope');
+  });
+  const findings = await probe(srv.url, { only: ['exposure'], extraHeaders: { cookie: 'session=secret' } });
+  srv.close();
+  assert.ok(sawAuthOnEnv, 'auth cookie reached the same-origin /.env probe');
+  assert.ok(findings.find((f) => f.id === 'exposed/.env' && !f.pass), 'finds the .env only reachable while authenticated');
+});
