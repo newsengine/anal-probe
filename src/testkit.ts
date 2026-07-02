@@ -64,6 +64,105 @@ export function checkSecurityHeaders(
   return problems;
 }
 
+// ───────────────────────────── RBAC / access-control probes ──────────────────────────────────────
+// Generalized from a large app-specific Playwright suite into app-AGNOSTIC helpers: you supply the
+// endpoints + auth contexts, they assert the HTTP-level access-control property. All black-box (a URL +
+// headers), no backend/test-server needed — so they run against any deployed app.
+
+/** One caller in an authz test: its auth headers + whether it SHOULD be allowed or denied. */
+export interface HttpActor {
+  label: string;
+  /** Auth headers/cookies identifying this actor. Omit/empty = anonymous. */
+  headers?: Record<string, string>;
+  /** Expected outcome for this actor on the endpoint under test. */
+  expect: 'allow' | 'deny';
+  /** Statuses that count as "denied" (default 401/403/404). */
+  deniedStatuses?: number[];
+}
+export interface AuthzResult { actor: string; ok: boolean; status: number; detail: string }
+
+/**
+ * RBAC / auth-enforcement probe: run one protected endpoint against several actors (anonymous, wrong-role
+ * user, admin, a cron-secret header, …) and assert each is allowed or denied as expected. Covers "unauth
+ * ⇒ 401", "wrong role ⇒ 403", "admin-only", "premium/feature gating", and "dual-auth (bearer OR secret)".
+ * `ok=false` is a real access-control violation.
+ */
+export async function rbacProbe(
+  request: () => { url: string; init?: RequestInit },
+  actors: HttpActor[],
+  fetchImpl: typeof fetch = fetch,
+): Promise<AuthzResult[]> {
+  const out: AuthzResult[] = [];
+  for (const a of actors) {
+    const denied = a.deniedStatuses ?? [401, 403, 404];
+    const { url, init } = request();
+    const res = await fetchImpl(url, { ...init, headers: { ...(init?.headers as any), ...a.headers } });
+    const isDenied = denied.includes(res.status);
+    const ok = a.expect === 'deny' ? isDenied : !isDenied;
+    out.push({
+      actor: a.label, ok, status: res.status,
+      detail: ok
+        ? `${a.expect === 'deny' ? 'denied' : 'allowed'} (${res.status}) as expected`
+        : a.expect === 'deny'
+          ? `NOT DENIED: ${a.label} got ${res.status} on a protected endpoint (expected 401/403/404)`
+          : `WRONGLY DENIED: ${a.label} got ${res.status} but should be allowed`,
+    });
+  }
+  return out;
+}
+
+/**
+ * Data-isolation probe for LIST endpoints: fetch the same collection as two different users and assert
+ * their resource-id sets are disjoint (neither sees the other's private rows). `extractIds` pulls the
+ * ids out of a response body. `ok=false` (shared ids) means the list isn't owner-scoped.
+ */
+export async function dataIsolationProbe(
+  request: () => { url: string; init?: RequestInit },
+  a: { label: string; headers: Record<string, string> },
+  b: { label: string; headers: Record<string, string> },
+  extractIds: (body: string) => string[],
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ ok: boolean; shared: string[]; detail: string }> {
+  const fetchIds = async (who: { headers: Record<string, string> }) => {
+    const { url, init } = request();
+    const res = await fetchImpl(url, { ...init, headers: { ...(init?.headers as any), ...who.headers } });
+    return new Set(extractIds(await res.text()));
+  };
+  const [idsA, idsB] = [await fetchIds(a), await fetchIds(b)];
+  const shared = [...idsA].filter((id) => idsB.has(id));
+  return { ok: shared.length === 0, shared, detail: shared.length ? `${a.label} and ${b.label} share ${shared.length} resource id(s) — list is not owner-scoped` : 'no shared resource ids between the two users' };
+}
+
+/**
+ * Mass-assignment probe: POST/PUT a create request whose body FORGES an auth-derived field (e.g.
+ * user_id/author_id/status), then assert the server ignored it — the forged value must NOT appear in the
+ * response. `ok=false` means the client can set fields it shouldn't (privilege escalation / spoofing).
+ */
+export async function massAssignmentProbe(
+  request: () => { url: string; init?: RequestInit },
+  forgedValue: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ ok: boolean; status: number; detail: string }> {
+  const { url, init } = request();
+  const res = await fetchImpl(url, init);
+  const body = await res.text();
+  const reflected = body.includes(forgedValue);
+  return { ok: !reflected, status: res.status, detail: reflected ? `server reflected the forged value "${forgedValue}" — field is client-writable` : 'forged field was not accepted' };
+}
+
+/** Scan a response body for sensitive field NAMES that should never be returned to a client. Pure. */
+export function findSensitiveFields(
+  body: string,
+  fields: string[] = ['password', 'password_hash', 'access_token', 'accesstoken', 'refresh_token', 'secret', 'api_key', 'apikey', 'private_key', 'client_secret', 'ssn'],
+): string[] {
+  const found = new Set<string>();
+  for (const f of fields) {
+    // Match the field as a JSON key: "field": …
+    if (new RegExp(`"${f.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}"\\s*:`, 'i').test(body)) found.add(f);
+  }
+  return [...found];
+}
+
 // ───────────────────────────── multi-tenant / cross-tenant helpers ───────────────────────────────
 // Many SaaS apps scope data by a tenant/org id passed as a query param (e.g. ?tenant_uuid=…). The classic
 // separation-of-accounts bug is a backend that TRUSTS that param instead of checking the caller belongs

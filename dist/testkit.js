@@ -37,6 +37,68 @@ export function checkSecurityHeaders(headers, opts = {}) {
         problems.push(opts.requireEnforcedCsp ? 'missing enforced Content-Security-Policy' : 'missing Content-Security-Policy (or Report-Only)');
     return problems;
 }
+/**
+ * RBAC / auth-enforcement probe: run one protected endpoint against several actors (anonymous, wrong-role
+ * user, admin, a cron-secret header, …) and assert each is allowed or denied as expected. Covers "unauth
+ * ⇒ 401", "wrong role ⇒ 403", "admin-only", "premium/feature gating", and "dual-auth (bearer OR secret)".
+ * `ok=false` is a real access-control violation.
+ */
+export async function rbacProbe(request, actors, fetchImpl = fetch) {
+    const out = [];
+    for (const a of actors) {
+        const denied = a.deniedStatuses ?? [401, 403, 404];
+        const { url, init } = request();
+        const res = await fetchImpl(url, { ...init, headers: { ...init?.headers, ...a.headers } });
+        const isDenied = denied.includes(res.status);
+        const ok = a.expect === 'deny' ? isDenied : !isDenied;
+        out.push({
+            actor: a.label, ok, status: res.status,
+            detail: ok
+                ? `${a.expect === 'deny' ? 'denied' : 'allowed'} (${res.status}) as expected`
+                : a.expect === 'deny'
+                    ? `NOT DENIED: ${a.label} got ${res.status} on a protected endpoint (expected 401/403/404)`
+                    : `WRONGLY DENIED: ${a.label} got ${res.status} but should be allowed`,
+        });
+    }
+    return out;
+}
+/**
+ * Data-isolation probe for LIST endpoints: fetch the same collection as two different users and assert
+ * their resource-id sets are disjoint (neither sees the other's private rows). `extractIds` pulls the
+ * ids out of a response body. `ok=false` (shared ids) means the list isn't owner-scoped.
+ */
+export async function dataIsolationProbe(request, a, b, extractIds, fetchImpl = fetch) {
+    const fetchIds = async (who) => {
+        const { url, init } = request();
+        const res = await fetchImpl(url, { ...init, headers: { ...init?.headers, ...who.headers } });
+        return new Set(extractIds(await res.text()));
+    };
+    const [idsA, idsB] = [await fetchIds(a), await fetchIds(b)];
+    const shared = [...idsA].filter((id) => idsB.has(id));
+    return { ok: shared.length === 0, shared, detail: shared.length ? `${a.label} and ${b.label} share ${shared.length} resource id(s) — list is not owner-scoped` : 'no shared resource ids between the two users' };
+}
+/**
+ * Mass-assignment probe: POST/PUT a create request whose body FORGES an auth-derived field (e.g.
+ * user_id/author_id/status), then assert the server ignored it — the forged value must NOT appear in the
+ * response. `ok=false` means the client can set fields it shouldn't (privilege escalation / spoofing).
+ */
+export async function massAssignmentProbe(request, forgedValue, fetchImpl = fetch) {
+    const { url, init } = request();
+    const res = await fetchImpl(url, init);
+    const body = await res.text();
+    const reflected = body.includes(forgedValue);
+    return { ok: !reflected, status: res.status, detail: reflected ? `server reflected the forged value "${forgedValue}" — field is client-writable` : 'forged field was not accepted' };
+}
+/** Scan a response body for sensitive field NAMES that should never be returned to a client. Pure. */
+export function findSensitiveFields(body, fields = ['password', 'password_hash', 'access_token', 'accesstoken', 'refresh_token', 'secret', 'api_key', 'apikey', 'private_key', 'client_secret', 'ssn']) {
+    const found = new Set();
+    for (const f of fields) {
+        // Match the field as a JSON key: "field": …
+        if (new RegExp(`"${f.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}"\\s*:`, 'i').test(body))
+            found.add(f);
+    }
+    return [...found];
+}
 // ───────────────────────────── multi-tenant / cross-tenant helpers ───────────────────────────────
 // Many SaaS apps scope data by a tenant/org id passed as a query param (e.g. ?tenant_uuid=…). The classic
 // separation-of-accounts bug is a backend that TRUSTS that param instead of checking the caller belongs

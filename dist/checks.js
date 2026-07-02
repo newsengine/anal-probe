@@ -310,6 +310,22 @@ export async function exposureChecks(ctx) {
             any = true;
         }
     }
+    // Debug/introspection endpoints that echo server secrets (service-role keys, tokens, password hashes).
+    // Safe GETs; body-validated so an SPA/HTML fallback or a normal JSON response doesn't false-positive.
+    const SECRET_IN_BODY = /"?(?:service_role|SUPABASE_SERVICE_ROLE_KEY|CRON_SECRET|STRIPE_SECRET(?:_KEY)?|password_hash|encrypted_password)"?|\$2[aby]\$|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|"(?:access_token|refresh_token|client_secret)"\s*:\s*"[^"]{8,}/i;
+    for (const dbg of ['/api/auth/debug', '/api/debug', '/api/_debug', '/api/auth/check', '/api/config', '/api/env']) {
+        const res = await safeFetch(ctx.origin + dbg, { redirect: 'follow', headers: ctx.opts.extraHeaders });
+        if (!res || !res.ok)
+            continue;
+        const body = (await res.text()).slice(0, 8000);
+        if (/<html/i.test(body))
+            continue; // SPA catch-all, not a real debug endpoint
+        if (SECRET_IN_BODY.test(body)) {
+            any = true;
+            out.push(f('exposure', `debug-leak${dbg}`, 'Debug endpoint leaks secrets/credentials', 'high', false, `${dbg} returns a body containing service-role keys, tokens, or password hashes`, 'Remove or lock down debug/introspection endpoints — never return service-role keys, session tokens, or password hashes to a client.'));
+            break;
+        }
+    }
     // Verbose error / stack-trace leak on an unknown path.
     const probe404 = await safeFetch(ctx.origin + '/__anal_probe_does_not_exist__', { redirect: 'follow', headers: ctx.opts.extraHeaders });
     if (probe404) {

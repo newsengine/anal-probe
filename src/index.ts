@@ -12,8 +12,10 @@ export {
 export {
   idorProbe, checkSecurityHeaders, checkCookieFlags,
   setTenantParam, classifyTenantAccess,
+  rbacProbe, dataIsolationProbe, massAssignmentProbe, findSensitiveFields,
   type IdorCase, type IdorResult, type TenantAuth,
   type TenantProbeResponse, type TenantVerdict,
+  type HttpActor, type AuthzResult,
 } from './testkit.js';
 export {
   runNpmAudit, failsAtLevel, type AuditResult,

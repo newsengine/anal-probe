@@ -34,6 +34,66 @@ export declare function idorProbe(attacker: TenantAuth, cases: IdorCase[], fetch
 export declare function checkSecurityHeaders(headers: Headers | Record<string, string>, opts?: {
     requireEnforcedCsp?: boolean;
 }): string[];
+/** One caller in an authz test: its auth headers + whether it SHOULD be allowed or denied. */
+export interface HttpActor {
+    label: string;
+    /** Auth headers/cookies identifying this actor. Omit/empty = anonymous. */
+    headers?: Record<string, string>;
+    /** Expected outcome for this actor on the endpoint under test. */
+    expect: 'allow' | 'deny';
+    /** Statuses that count as "denied" (default 401/403/404). */
+    deniedStatuses?: number[];
+}
+export interface AuthzResult {
+    actor: string;
+    ok: boolean;
+    status: number;
+    detail: string;
+}
+/**
+ * RBAC / auth-enforcement probe: run one protected endpoint against several actors (anonymous, wrong-role
+ * user, admin, a cron-secret header, …) and assert each is allowed or denied as expected. Covers "unauth
+ * ⇒ 401", "wrong role ⇒ 403", "admin-only", "premium/feature gating", and "dual-auth (bearer OR secret)".
+ * `ok=false` is a real access-control violation.
+ */
+export declare function rbacProbe(request: () => {
+    url: string;
+    init?: RequestInit;
+}, actors: HttpActor[], fetchImpl?: typeof fetch): Promise<AuthzResult[]>;
+/**
+ * Data-isolation probe for LIST endpoints: fetch the same collection as two different users and assert
+ * their resource-id sets are disjoint (neither sees the other's private rows). `extractIds` pulls the
+ * ids out of a response body. `ok=false` (shared ids) means the list isn't owner-scoped.
+ */
+export declare function dataIsolationProbe(request: () => {
+    url: string;
+    init?: RequestInit;
+}, a: {
+    label: string;
+    headers: Record<string, string>;
+}, b: {
+    label: string;
+    headers: Record<string, string>;
+}, extractIds: (body: string) => string[], fetchImpl?: typeof fetch): Promise<{
+    ok: boolean;
+    shared: string[];
+    detail: string;
+}>;
+/**
+ * Mass-assignment probe: POST/PUT a create request whose body FORGES an auth-derived field (e.g.
+ * user_id/author_id/status), then assert the server ignored it — the forged value must NOT appear in the
+ * response. `ok=false` means the client can set fields it shouldn't (privilege escalation / spoofing).
+ */
+export declare function massAssignmentProbe(request: () => {
+    url: string;
+    init?: RequestInit;
+}, forgedValue: string, fetchImpl?: typeof fetch): Promise<{
+    ok: boolean;
+    status: number;
+    detail: string;
+}>;
+/** Scan a response body for sensitive field NAMES that should never be returned to a client. Pure. */
+export declare function findSensitiveFields(body: string, fields?: string[]): string[];
 /** Set (or add) a tenant id on a URL's query string. Keeps relative URLs relative. */
 export declare function setTenantParam(url: string, tenantId: string, param?: string): string;
 export interface TenantProbeResponse {

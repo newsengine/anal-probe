@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { probe, summarize, normalizeUrl } from '../dist/probe.js';
 import { scanSecrets, html as H } from '../dist/core.js';
-import { checkSecurityHeaders, checkCookieFlags, idorProbe, setTenantParam, classifyTenantAccess } from '../dist/testkit.js';
+import { checkSecurityHeaders, checkCookieFlags, idorProbe, setTenantParam, classifyTenantAccess, rbacProbe, dataIsolationProbe, massAssignmentProbe, findSensitiveFields } from '../dist/testkit.js';
 import { failsAtLevel } from '../dist/audit.js';
 import { lintCsp } from '../dist/checks.js';
 import { toSarif } from '../dist/sarif.js';
@@ -530,4 +530,54 @@ test('classifyTenantAccess: leak vs isolated vs inconclusive', () => {
 
   // 200 with foreign-but-non-owner data -> needs a human.
   assert.equal(classifyTenantAccess({ baseline: ownerData, attack: { status: 200, body: '{"records":[{"id":99}]}' }, control: attackerOwn }).verdict, 'inspect');
+});
+
+// ═══════════════════ RBAC / access-control testkit (generalized from db-nextjs-fresh) ═══════════
+
+test('rbacProbe: passes a properly-gated endpoint, flags an open one', async () => {
+  // Stub: admin token -> 200, any other token -> 403, no token -> 401.
+  const gated = async (_url, init) => {
+    const role = new Headers(init?.headers).get('x-role');
+    return new Response('ok', { status: role === 'admin' ? 200 : role ? 403 : 401 });
+  };
+  const actors = [
+    { label: 'anonymous', expect: 'deny' },
+    { label: 'plain user', headers: { 'x-role': 'user' }, expect: 'deny' },
+    { label: 'admin', headers: { 'x-role': 'admin' }, expect: 'allow' },
+  ];
+  const good = await rbacProbe(() => ({ url: 'https://x/api/admin/users' }), actors, gated);
+  assert.ok(good.every((r) => r.ok), 'a correctly-gated endpoint passes every actor');
+
+  const wideOpen = async () => new Response('ok', { status: 200 });
+  const bad = await rbacProbe(() => ({ url: 'https://x/api/admin/users' }), actors, wideOpen);
+  assert.ok(bad.find((r) => r.actor === 'anonymous' && !r.ok), 'flags anon NOT being denied on an open endpoint');
+  assert.ok(bad.find((r) => r.actor === 'plain user' && !r.ok), 'flags a plain user reaching an admin endpoint');
+});
+
+test('dataIsolationProbe: disjoint id sets pass, shared ids fail', async () => {
+  const idsByUser = { A: '{"items":[{"id":"a1"},{"id":"a2"}]}', B: '{"items":[{"id":"b1"}]}' };
+  const scoped = async (_url, init) => new Response(idsByUser[new Headers(init?.headers).get('x-user')], { status: 200 });
+  const extract = (body) => [...body.matchAll(/"id":"([^"]+)"/g)].map((m) => m[1]);
+  const ok = await dataIsolationProbe(() => ({ url: 'https://x/api/items' }), { label: 'A', headers: { 'x-user': 'A' } }, { label: 'B', headers: { 'x-user': 'B' } }, extract, scoped);
+  assert.ok(ok.ok && ok.shared.length === 0, 'owner-scoped lists are disjoint');
+
+  const global = async () => new Response('{"items":[{"id":"a1"},{"id":"b1"}]}', { status: 200 });
+  const leak = await dataIsolationProbe(() => ({ url: 'https://x/api/items' }), { label: 'A', headers: {} }, { label: 'B', headers: {} }, extract, global);
+  assert.ok(!leak.ok && leak.shared.length === 2, 'a global list (both users see all) is flagged');
+});
+
+test('massAssignmentProbe: flags a server that reflects a forged field', async () => {
+  const echo = async (_url, init) => new Response(init?.body ?? '', { status: 200 });
+  const bad = await massAssignmentProbe(() => ({ url: 'https://x/api/stories', init: { method: 'POST', body: '{"title":"t","author_id":"attacker-forged"}' } }), 'attacker-forged', echo);
+  assert.ok(!bad.ok, 'server that echoes the forged author_id is flagged');
+
+  const strips = async () => new Response('{"title":"t","author_id":"real-server-id"}', { status: 200 });
+  const good = await massAssignmentProbe(() => ({ url: 'https://x/api/stories', init: { method: 'POST', body: '{"author_id":"attacker-forged"}' } }), 'attacker-forged', strips);
+  assert.ok(good.ok, 'server that ignores the forged field passes');
+});
+
+test('findSensitiveFields spots secret keys in a response body', () => {
+  assert.deepEqual(findSensitiveFields('{"user":"x","access_token":"ey..."}').sort(), ['access_token']);
+  assert.ok(findSensitiveFields('{"password_hash":"$2b$10$...","role":"admin"}').includes('password_hash'));
+  assert.deepEqual(findSensitiveFields('{"id":1,"name":"ok"}'), [], 'clean body has none');
 });
