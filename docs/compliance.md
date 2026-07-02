@@ -1,15 +1,48 @@
 # Standards & compliance mapping
 
 anal-probe maps its checks to recognized standards so a scan doubles as a conformance check. Run any
-scan with `--compliance` for a live report:
+scan with `--compliance` for a live report (ASVS L1 coverage, OWASP Top 10 + API Top 10, CWE list, and
+A+–F security/TLS scorecards):
 
 ```bash
-anal-probe https://your-app.example.com --compliance          # ASVS L1 + OWASP Top 10 report
-anal-probe https://your-app.example.com --compliance --json    # machine-readable (findings tagged + coverage)
+anal-probe https://your-app.example.com --compliance          # human report
+anal-probe https://your-app.example.com --compliance --json    # findings tagged with standards + coverage block
 ```
 
-Standards covered: **OWASP ASVS 4.0.3**, **OWASP Top 10 (2021)**, **OWASP WSTG**. Dependency CVEs via
-`audit` (npm advisory DB); service CVEs via `recon --cve` / `cve` (NVD).
+## Standards coverage at a glance — what we DO and DON'T test
+
+anal-probe is a **safe-to-run black-box** scanner: a URL in, no source, no authentication required, no
+attack payloads. That boundary decides what we can honestly test. Everything below is deliberate.
+
+| Standard / checklist | Status | Notes |
+|----------------------|--------|-------|
+| **OWASP ASVS 4.0.3 — Level 1** | ✅ **23/25** black-box reqs | full table below; 2 honest gaps (V3.4.5, V14.4.2) |
+| OWASP ASVS — Level 2 / 3 | ⛔ not tested | need authenticated flows, token/entropy analysis, source review |
+| **OWASP Top 10 (2021)** | ✅ mapped | A01/A02/A05 strong; A06/A07/A08 partial; A03/A09/A10 out (below) |
+| **OWASP API Security Top 10 (2023)** | ✅ partial | API1 BOLA, API4 resource-consumption, API5 BFLA (via testkit), API8 misconfig, API9 inventory |
+| **OWASP WSTG** | ✅ per-finding IDs | information-gathering, config, error-handling, crypto, client-side test IDs |
+| **CWE (MITRE)** | ✅ every finding tagged | e.g. CWE-319, CWE-1021, CWE-693; emitted in `--compliance` + SARIF (`external/cwe/*`) |
+| **CVE — dependencies** | ✅ `audit` | npm/GitHub advisory database |
+| **CVE — services** | ✅ `recon --cve` / `cve` | NVD keyword API for detected product+version |
+| **NIST SP 800-52r2 (TLS)** | ✅ via TLS grading | protocol/cipher/HSTS map to the TLS config guidance |
+| **PCI-DSS 4.0 (web subset)** | ✅ partial | Req 4 (TLS), 6.4.3 (SRI), 2.2/6.2 (config/headers) — the black-box-observable parts |
+| **Mozilla Observatory / securityheaders** | ✅ A+–F header grade | `securityGrade` scorecard |
+| **SSL Labs (Qualys)** | ✅ A+–F TLS grade | `tlsGrade` scorecard (protocol/cipher/HSTS/redirect) |
+| **WCAG 2.2 (accessibility)** | ⚠️ basic | `a11y` category maps to SC 1.1.1 (alt), 3.1.1 (lang), 1.4.10 (viewport), 1.3.1 (labels) — not a full audit |
+| OWASP Top 10 **A03 Injection** | ⛔ not tested | needs active SQLi/XSS fuzzing — not safe to run against production |
+| OWASP Top 10 **A10 SSRF** | ⛔ not tested | needs active exploitation |
+| OWASP Top 10 **A09 Logging/Monitoring** | ⛔ not testable | server-side, not observable over HTTP |
+| CSRF (active) | ⛔ not tested | needs an authenticated flow + crafted requests (we do check SameSite) |
+| File-upload validation (ASVS V12) | ⛔ not tested | needs an authenticated upload + active payloads |
+| **CIS Benchmarks** (server/OS) | ⛔ out of scope | host-config hardening, needs system access not black-box |
+| **ISO 27001 / SOC 2 / HIPAA / GDPR** | ⛔ out of scope | organizational/process frameworks — a scanner provides *evidence*, can't certify them |
+| **OWASP MASVS/MASTG** (mobile), **SAMM** | ⛔ n/a | mobile / maturity-model, not web-app-scan applicable |
+| **OWASP Top 10 2025** | ⏳ tracking | not finalized as of this writing; will map when released |
+
+**The rule:** we test everything verifiable black-box without sending attack payloads or needing an
+account. The ⛔ items require active exploitation, authenticated flows, source review, or system access —
+that's ZAP / Burp / manual-pentest / SCA-at-build-time territory, and claiming to "test" them would be
+dishonest. For those, anal-probe tells you where its coverage ends.
 
 ## OWASP ASVS 4.0.3 — Level 1, black-box-testable subset
 

@@ -2,6 +2,7 @@
 // Render findings as SARIF 2.1.0 so GitHub code scanning can ingest them (upload-sarif action) and show
 // each issue in the repo's Security tab. Only FAILING findings become results; passing checks are noise
 // in a scanning UI. Rules are de-duplicated by finding id so the Security tab groups them sensibly.
+import { refsFor } from './compliance.js';
 const LEVEL = {
     high: 'error',
     medium: 'warning',
@@ -21,11 +22,20 @@ export function toSarif(findings, opts = {}) {
             shortDescription: { text: f.title },
             ...(f.fix ? { help: { text: f.fix } } : {}),
             defaultConfiguration: { level: LEVEL[f.severity] },
-            properties: {
-                category: f.category,
-                // GitHub uses this to bucket code-scanning alerts by security severity.
-                ...(f.severity === 'high' || f.severity === 'medium' ? { 'security-severity': f.severity === 'high' ? '8.0' : '5.0' } : {}),
-            },
+            properties: (() => {
+                const refs = refsFor(f.id);
+                // GitHub code-scanning reads CWE from tags in the `external/cwe/cwe-NNN` form.
+                const tags = [...new Set(['security', f.category, ...(refs.cwe ?? []).map((c) => `external/cwe/${c.toLowerCase()}`)])];
+                return {
+                    category: f.category,
+                    tags,
+                    ...(refs.cwe ? { cwe: refs.cwe } : {}),
+                    ...(refs.owasp ? { owaspTop10: refs.owasp } : {}),
+                    ...(refs.asvs ? { asvs: refs.asvs } : {}),
+                    // GitHub uses this to bucket code-scanning alerts by security severity.
+                    ...(f.severity === 'high' || f.severity === 'medium' ? { 'security-severity': f.severity === 'high' ? '8.0' : '5.0' } : {}),
+                };
+            })(),
         });
     }
     const results = failing.map((f) => ({

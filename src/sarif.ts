@@ -4,6 +4,7 @@
 // in a scanning UI. Rules are de-duplicated by finding id so the Security tab groups them sensibly.
 
 import type { Finding, Severity } from './types.js';
+import { refsFor } from './compliance.js';
 
 const LEVEL: Record<Severity, 'error' | 'warning' | 'note'> = {
   high: 'error',
@@ -23,7 +24,7 @@ export function toSarif(findings: Finding[], opts: SarifOptions = {}): unknown {
   const failing = findings.filter((f) => !f.pass);
 
   // One rule per distinct finding id — carries the fix as help text so it shows in the Security tab.
-  const rules = new Map<string, { id: string; name: string; shortDescription: { text: string }; help?: { text: string }; defaultConfiguration: { level: string }; properties: { category: string; security_severity_level?: string } }>();
+  const rules = new Map<string, { id: string; name: string; shortDescription: { text: string }; help?: { text: string }; defaultConfiguration: { level: string }; properties: Record<string, unknown> }>();
   for (const f of failing) {
     if (rules.has(f.id)) continue;
     rules.set(f.id, {
@@ -32,11 +33,20 @@ export function toSarif(findings: Finding[], opts: SarifOptions = {}): unknown {
       shortDescription: { text: f.title },
       ...(f.fix ? { help: { text: f.fix } } : {}),
       defaultConfiguration: { level: LEVEL[f.severity] },
-      properties: {
-        category: f.category,
-        // GitHub uses this to bucket code-scanning alerts by security severity.
-        ...(f.severity === 'high' || f.severity === 'medium' ? { 'security-severity': f.severity === 'high' ? '8.0' : '5.0' } : {}),
-      },
+      properties: (() => {
+        const refs = refsFor(f.id);
+        // GitHub code-scanning reads CWE from tags in the `external/cwe/cwe-NNN` form.
+        const tags = [...new Set(['security', f.category, ...(refs.cwe ?? []).map((c) => `external/cwe/${c.toLowerCase()}`)])];
+        return {
+          category: f.category,
+          tags,
+          ...(refs.cwe ? { cwe: refs.cwe } : {}),
+          ...(refs.owasp ? { owaspTop10: refs.owasp } : {}),
+          ...(refs.asvs ? { asvs: refs.asvs } : {}),
+          // GitHub uses this to bucket code-scanning alerts by security severity.
+          ...(f.severity === 'high' || f.severity === 'medium' ? { 'security-severity': f.severity === 'high' ? '8.0' : '5.0' } : {}),
+        };
+      })(),
     });
   }
 

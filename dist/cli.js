@@ -24,7 +24,7 @@ import { runNpmAudit, failsAtLevel } from './audit.js';
 import { toSarif } from './sarif.js';
 import { buildBaseline, applyBaseline } from './baseline.js';
 import { loadConfig } from './config.js';
-import { asvsCoverage, owaspTop10Hit, refsFor, OWASP_TOP10_NAMES } from './compliance.js';
+import { asvsCoverage, owaspTop10Hit, refsFor, OWASP_TOP10_NAMES, apiTop10Hit, cwesHit, securityGrade, tlsGrade, OWASP_API_TOP10_NAMES } from './compliance.js';
 import { recon, parsePorts } from './active.js';
 import { identifyEdge } from './host.js';
 import { lookupCves } from './cve.js';
@@ -419,7 +419,8 @@ async function main() {
     }
     else if (flag('--json')) {
         const withStd = flag('--compliance') ? findings.map((f) => ({ ...f, standards: refsFor(f.id) })) : findings;
-        console.log(JSON.stringify({ url, summary: sum, findings: withStd, ...(flag('--compliance') ? { compliance: { asvsL1: asvsCoverage(findings), owaspTop10: owaspTop10Hit(findings) } } : {}), ...(diff ? { baseline: { new: diff.newFailures.length, accepted: diff.baselined.length } } : {}) }, null, 2));
+        const compliance = flag('--compliance') ? { asvsL1: asvsCoverage(findings), owaspTop10: owaspTop10Hit(findings), owaspApiTop10: apiTop10Hit(findings), cwe: cwesHit(findings), securityGrade: securityGrade(findings), tlsGrade: tlsGrade(findings) } : undefined;
+        console.log(JSON.stringify({ url, summary: sum, findings: withStd, ...(compliance ? { compliance } : {}), ...(diff ? { baseline: { new: diff.newFailures.length, accepted: diff.baselined.length } } : {}) }, null, 2));
     }
     else {
         // --quiet: show only failures (good for CI logs); default shows passes too so a clean scan is visible.
@@ -455,6 +456,8 @@ async function main() {
             console.log(`   ${n('pass')} pass · ${n('fail')} fail · ${n('not-observed')} not-observed · ${n('not-covered')} not-covered  (of ${cov.length})`);
             for (const r of cov)
                 console.log(`   ${ICON[r.status]} ${r.id}  ${r.text}`);
+            const grade = securityGrade(findings);
+            console.log(`\n🏅 Scorecard — security grade ${grade.grade} (${grade.score}/100) · TLS grade ${tlsGrade(findings)}`);
             const hits = owaspTop10Hit(findings);
             const keys = Object.keys(hits).sort();
             console.log(`\n🔟 OWASP Top 10 (2021) — categories with open issues`);
@@ -462,6 +465,16 @@ async function main() {
                 console.log('   none');
             for (const k of keys)
                 console.log(`   ${k} ${OWASP_TOP10_NAMES[k]} — ${hits[k]} issue(s)`);
+            const api = apiTop10Hit(findings);
+            const apiKeys = Object.keys(api).sort();
+            if (apiKeys.length) {
+                console.log(`\n🔌 OWASP API Security Top 10 (2023) — categories with open issues`);
+                for (const k of apiKeys)
+                    console.log(`   ${k} ${OWASP_API_TOP10_NAMES[k]} — ${api[k]} issue(s)`);
+            }
+            const cwes = cwesHit(findings);
+            if (cwes.length)
+                console.log(`\n🏷️  CWE weaknesses flagged: ${cwes.join(', ')}`);
             console.log('');
         }
     }

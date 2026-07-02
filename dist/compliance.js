@@ -3,44 +3,45 @@
 // OWASP Web Security Testing Guide (WSTG) — and reports coverage against the black-box-testable subset of
 // ASVS Level 1. This is what lets a scan double as an OWASP conformance check. Refs are keyed by
 // finding-id PREFIX (many findings share an id stem, e.g. cookie.<name>, exposed/<path>).
-// Longest-prefix wins, so specific ids override general stems.
+// Longest-prefix wins, so specific ids override general stems. cwe = MITRE CWE ids; apiTop10 = OWASP API
+// Security Top 10 (2023).
 const STANDARDS = [
-    ['cookie-prefix.', { asvs: ['V3.4.4'], owasp: 'A05' }],
-    ['cookie.', { asvs: ['V3.4.1', 'V3.4.2', 'V3.4.3'], owasp: 'A05', wstg: ['WSTG-SESS-02'] }],
-    ['cache.sensitive', { asvs: ['V8.2.1'], owasp: 'A05' }],
-    ['error.stacktrace', { asvs: ['V7.4.1'], owasp: 'A05', wstg: ['WSTG-ERRH-01'] }],
-    ['tls.scheme', { asvs: ['V9.1.1'], owasp: 'A02', wstg: ['WSTG-CRYP-03'] }],
-    ['tls.redirect', { asvs: ['V9.1.1'], owasp: 'A02' }],
-    ['tls.cipher', { asvs: ['V9.1.2'], owasp: 'A02', wstg: ['WSTG-CRYP-01'] }],
-    ['tls.protocol', { asvs: ['V9.1.3'], owasp: 'A02', wstg: ['WSTG-CRYP-01'] }],
-    ['tls.hsts-preload', { asvs: ['V14.4.5'], owasp: 'A05' }],
-    ['tls.expiry', { asvs: ['V9.1.1'], owasp: 'A02' }],
-    ['header.strict-transport-security', { asvs: ['V14.4.5'], owasp: 'A05', wstg: ['WSTG-CONF-07'] }],
-    ['header.content-security-policy', { asvs: ['V14.4.3'], owasp: 'A05', wstg: ['WSTG-CONF-12'] }],
-    ['header.x-content-type-options', { asvs: ['V14.4.4'], owasp: 'A05' }],
-    ['header.x-frame-options', { asvs: ['V14.4.7'], owasp: 'A05', wstg: ['WSTG-CLNT-09'] }],
-    ['header.referrer-policy', { asvs: ['V14.4.6'], owasp: 'A05' }],
-    ['header.content-type', { asvs: ['V14.4.1'], owasp: 'A05' }],
-    ['header.permissions-policy', { owasp: 'A05' }],
-    ['header.cross-origin-opener-policy', { owasp: 'A05' }],
-    ['header.cross-origin-resource-policy', { owasp: 'A05' }],
-    ['csp.', { asvs: ['V14.4.3'], owasp: 'A05', wstg: ['WSTG-CONF-12'] }],
-    ['http.methods', { asvs: ['V14.5.1'], owasp: 'A05', wstg: ['WSTG-CONF-06'] }],
-    ['cors.reflection', { asvs: ['V14.5.3'], owasp: 'A05', wstg: ['WSTG-CLNT-07'] }],
-    ['open-redirect', { owasp: 'A01', wstg: ['WSTG-CLNT-04'] }],
-    ['sri', { asvs: ['V14.2.3'], owasp: 'A08', wstg: ['WSTG-CLNT-11'] }],
-    ['disclosure.', { asvs: ['V14.3.3'], owasp: 'A05', wstg: ['WSTG-INFO-08'] }],
+    ['cookie-prefix.', { asvs: ['V3.4.4'], owasp: 'A05', cwe: ['CWE-614'] }],
+    ['cookie.', { asvs: ['V3.4.1', 'V3.4.2', 'V3.4.3'], owasp: 'A05', wstg: ['WSTG-SESS-02'], cwe: ['CWE-614', 'CWE-1004'] }],
+    ['cache.sensitive', { asvs: ['V8.2.1'], owasp: 'A05', cwe: ['CWE-525'] }],
+    ['error.stacktrace', { asvs: ['V7.4.1'], owasp: 'A05', wstg: ['WSTG-ERRH-01'], cwe: ['CWE-209'] }],
+    ['tls.scheme', { asvs: ['V9.1.1'], owasp: 'A02', wstg: ['WSTG-CRYP-03'], cwe: ['CWE-319'] }],
+    ['tls.redirect', { asvs: ['V9.1.1'], owasp: 'A02', cwe: ['CWE-319'] }],
+    ['tls.cipher', { asvs: ['V9.1.2'], owasp: 'A02', wstg: ['WSTG-CRYP-01'], cwe: ['CWE-327'] }],
+    ['tls.protocol', { asvs: ['V9.1.3'], owasp: 'A02', wstg: ['WSTG-CRYP-01'], cwe: ['CWE-326'] }],
+    ['tls.hsts-preload', { asvs: ['V14.4.5'], owasp: 'A05', cwe: ['CWE-319'] }],
+    ['tls.expiry', { asvs: ['V9.1.1'], owasp: 'A02', cwe: ['CWE-295'] }],
+    ['header.strict-transport-security', { asvs: ['V14.4.5'], owasp: 'A05', wstg: ['WSTG-CONF-07'], cwe: ['CWE-319'] }],
+    ['header.content-security-policy', { asvs: ['V14.4.3'], owasp: 'A05', wstg: ['WSTG-CONF-12'], cwe: ['CWE-693', 'CWE-79'] }],
+    ['header.x-content-type-options', { asvs: ['V14.4.4'], owasp: 'A05', cwe: ['CWE-693'] }],
+    ['header.x-frame-options', { asvs: ['V14.4.7'], owasp: 'A05', wstg: ['WSTG-CLNT-09'], cwe: ['CWE-1021'] }],
+    ['header.referrer-policy', { asvs: ['V14.4.6'], owasp: 'A05', cwe: ['CWE-200'] }],
+    ['header.content-type', { asvs: ['V14.4.1'], owasp: 'A05', cwe: ['CWE-436'] }],
+    ['header.permissions-policy', { owasp: 'A05', cwe: ['CWE-693'] }],
+    ['header.cross-origin-opener-policy', { owasp: 'A05', cwe: ['CWE-1021'] }],
+    ['header.cross-origin-resource-policy', { owasp: 'A05', cwe: ['CWE-1021'] }],
+    ['csp.', { asvs: ['V14.4.3'], owasp: 'A05', wstg: ['WSTG-CONF-12'], cwe: ['CWE-79', 'CWE-693'] }],
+    ['http.methods', { asvs: ['V14.5.1'], owasp: 'A05', wstg: ['WSTG-CONF-06'], cwe: ['CWE-16'], apiTop10: 'API8:2023' }],
+    ['cors.reflection', { asvs: ['V14.5.3'], owasp: 'A05', wstg: ['WSTG-CLNT-07'], cwe: ['CWE-942'], apiTop10: 'API8:2023' }],
+    ['open-redirect', { owasp: 'A01', wstg: ['WSTG-CLNT-04'], cwe: ['CWE-601'] }],
+    ['sri', { asvs: ['V14.2.3'], owasp: 'A08', wstg: ['WSTG-CLNT-11'], cwe: ['CWE-353', 'CWE-830'] }],
+    ['disclosure.', { asvs: ['V14.3.3'], owasp: 'A05', wstg: ['WSTG-INFO-08'], cwe: ['CWE-200'], apiTop10: 'API9:2023' }],
     ['securitytxt', { owasp: 'A05' }],
-    ['rate-limit', { owasp: 'A07', wstg: ['WSTG-ATHN-01'] }],
-    ['secret.', { asvs: ['V13.1.3'], owasp: 'A02', wstg: ['WSTG-CRYP-04'] }],
-    ['sourcemap.exposed', { asvs: ['V14.3.2'], owasp: 'A05' }],
-    ['debug-leak', { asvs: ['V14.3.2'], owasp: 'A05', wstg: ['WSTG-CONF-02'] }],
-    ['dir-listing', { asvs: ['V12.5.1'], owasp: 'A05', wstg: ['WSTG-CONF-04'] }],
-    ['robots.sensitive', { owasp: 'A05', wstg: ['WSTG-INFO-01'] }],
-    ['graphql.introspection', { asvs: ['V13.2.1'], owasp: 'A05' }],
-    ['exposed', { asvs: ['V12.5.1', 'V14.3.2'], owasp: 'A05', wstg: ['WSTG-CONF-04'] }],
-    ['framework', { asvs: ['V14.3.2', 'V14.2.2'], owasp: 'A05', wstg: ['WSTG-CONF-02'] }],
-    ['idor', { owasp: 'A01', wstg: ['WSTG-ATHZ-04'] }],
+    ['rate-limit', { owasp: 'A07', wstg: ['WSTG-ATHN-01'], cwe: ['CWE-307', 'CWE-799'], apiTop10: 'API4:2023' }],
+    ['secret.', { asvs: ['V13.1.3'], owasp: 'A02', wstg: ['WSTG-CRYP-04'], cwe: ['CWE-798', 'CWE-312'] }],
+    ['sourcemap.exposed', { asvs: ['V14.3.2'], owasp: 'A05', cwe: ['CWE-540'] }],
+    ['debug-leak', { asvs: ['V14.3.2'], owasp: 'A05', wstg: ['WSTG-CONF-02'], cwe: ['CWE-200', 'CWE-489'] }],
+    ['dir-listing', { asvs: ['V12.5.1'], owasp: 'A05', wstg: ['WSTG-CONF-04'], cwe: ['CWE-548'] }],
+    ['robots.sensitive', { owasp: 'A05', wstg: ['WSTG-INFO-01'], cwe: ['CWE-200'] }],
+    ['graphql.introspection', { asvs: ['V13.2.1'], owasp: 'A05', cwe: ['CWE-200'], apiTop10: 'API9:2023' }],
+    ['exposed', { asvs: ['V12.5.1', 'V14.3.2'], owasp: 'A05', wstg: ['WSTG-CONF-04'], cwe: ['CWE-538', 'CWE-200'] }],
+    ['framework', { asvs: ['V14.3.2', 'V14.2.2'], owasp: 'A05', wstg: ['WSTG-CONF-02'], cwe: ['CWE-16'] }],
+    ['idor', { owasp: 'A01', wstg: ['WSTG-ATHZ-04'], cwe: ['CWE-639'], apiTop10: 'API1:2023' }],
 ];
 /** Standards mapped to a finding id (longest matching prefix). */
 export function refsFor(findingId) {
@@ -116,3 +117,60 @@ export const OWASP_TOP10_NAMES = {
     A04: 'Insecure Design', A05: 'Security Misconfiguration', A06: 'Vulnerable Components',
     A07: 'Auth Failures', A08: 'Software/Data Integrity', A09: 'Logging/Monitoring', A10: 'SSRF',
 };
+export const OWASP_API_TOP10_NAMES = {
+    'API1:2023': 'Broken Object Level Authorization (BOLA)',
+    'API3:2023': 'Broken Object Property Level Authorization',
+    'API4:2023': 'Unrestricted Resource Consumption',
+    'API5:2023': 'Broken Function Level Authorization',
+    'API8:2023': 'Security Misconfiguration',
+    'API9:2023': 'Improper Inventory Management',
+};
+/** OWASP API Security Top 10 (2023) categories hit by failing findings. */
+export function apiTop10Hit(findings) {
+    const hits = {};
+    for (const f of findings) {
+        if (f.pass)
+            continue;
+        const a = refsFor(f.id).apiTop10;
+        if (a)
+            hits[a] = (hits[a] || 0) + 1;
+    }
+    return hits;
+}
+/** Distinct CWE ids across failing findings. */
+export function cwesHit(findings) {
+    const set = new Set();
+    for (const f of findings) {
+        if (!f.pass)
+            for (const c of refsFor(f.id).cwe ?? [])
+                set.add(c);
+    }
+    return [...set].sort();
+}
+/** Mozilla-Observatory-style A+–F grade from failing security/exposure/secrets findings. */
+export function securityGrade(findings) {
+    const weight = { high: 20, medium: 8, low: 3, info: 0 };
+    let score = 100;
+    for (const f of findings) {
+        if (f.pass || !['security', 'exposure', 'secrets'].includes(f.category))
+            continue;
+        score -= weight[f.severity] ?? 0;
+    }
+    score = Math.max(0, score);
+    const grade = score >= 95 ? 'A+' : score >= 85 ? 'A' : score >= 75 ? 'B' : score >= 65 ? 'C' : score >= 50 ? 'D' : 'F';
+    return { grade, score };
+}
+/** SSL-Labs-style A+–F TLS grade from the tls.* findings. */
+export function tlsGrade(findings) {
+    const fail = (id) => findings.some((f) => f.id === id && !f.pass);
+    const pass = (id) => findings.some((f) => f.id === id && f.pass);
+    if (fail('tls.scheme'))
+        return 'F'; // not served over HTTPS
+    if (fail('tls.protocol') || fail('tls.cipher'))
+        return 'C'; // deprecated protocol / weak cipher
+    if (fail('tls.redirect'))
+        return 'B'; // no HTTP→HTTPS redirect
+    if (pass('tls.hsts-preload'))
+        return 'A+'; // modern + preload-eligible HSTS
+    return pass('tls.protocol') ? 'A' : 'B';
+}
