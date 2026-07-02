@@ -8,6 +8,7 @@ import {
   securityChecks, secretChecks, exposureChecks, reliabilityChecks, seoChecks, a11yChecks, performanceChecks,
 } from './checks.js';
 import { dnsChecks } from './dns.js';
+import { agentChecks } from './agent.js';
 
 export type { Category, Finding, ScanContext, ScanOptions, Severity };
 // Back-compat alias: ProbeOptions was the old name.
@@ -22,6 +23,7 @@ const RUNNERS: Record<Category, (ctx: ScanContext) => Promise<Finding[]>> = {
   seo: seoChecks,
   a11y: a11yChecks,
   performance: performanceChecks,
+  agent: agentChecks,
 };
 
 export const ALL_CATEGORIES = Object.keys(RUNNERS) as Category[];

@@ -13,7 +13,8 @@ export type Category =
   | 'reliability'  // broken links/images, 500s, stack-trace leaks, mixed content
   | 'seo'          // title/description/canonical/robots/sitemap
   | 'a11y'         // lang, alt text, labels, viewport
-  | 'performance'; // compression, caching, page weight
+  | 'performance'  // compression, caching, page weight
+  | 'agent';       // agent-readiness: llms.txt, AI-crawler policy, SSR content, structured data
 
 export interface Finding {
   id: string;

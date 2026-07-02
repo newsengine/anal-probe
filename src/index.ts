@@ -23,6 +23,10 @@ export {
 } from './dns.js';
 export { toSarif, type SarifOptions } from './sarif.js';
 export {
+  agentChecks, evaluateAgentReadiness, visibleText, aiCrawlersBlocked, AI_CRAWLERS,
+  type AgentReadinessInput,
+} from './agent.js';
+export {
   findingKey, buildBaseline, applyBaseline,
   type Baseline, type BaselineDiff,
 } from './baseline.js';

@@ -11,6 +11,7 @@ import { lintCsp } from '../dist/checks.js';
 import { toSarif } from '../dist/sarif.js';
 import { buildBaseline, applyBaseline } from '../dist/baseline.js';
 import { evaluateDnsHygiene, apexOf } from '../dist/dns.js';
+import { evaluateAgentReadiness, visibleText, aiCrawlersBlocked } from '../dist/agent.js';
 
 function server(handler: http.RequestListener): Promise<{ url: string; close: () => void }> {
   return new Promise((resolve) => {
@@ -413,4 +414,68 @@ test('probe returns (does not hang) against a non-responsive server within the t
   hanging.close();
   assert.ok(elapsed < 8000, `scan should abort quickly, took ${elapsed}ms`);
   assert.ok(findings.find((f) => f.id === 'reachability' && !f.pass), 'reports the site as unreachable');
+});
+
+// ═══════════════════════ agent-readiness category (#11) ═════════════════════
+
+test('visibleText strips scripts/styles/tags and leaves readable content', () => {
+  const html = '<html><head><style>.x{color:red}</style><script>var a=1</script></head><body><h1>Hello</h1><p>Real content here.</p></body></html>';
+  const t = visibleText(html);
+  assert.ok(t.includes('Hello') && t.includes('Real content here.'), 'keeps body text');
+  assert.ok(!t.includes('var a') && !t.includes('color:red'), 'drops script/style bodies');
+});
+
+test('aiCrawlersBlocked parses robots.txt groups correctly', () => {
+  const robots = [
+    'User-agent: GPTBot', 'Disallow: /',
+    '', 'User-agent: *', 'Disallow: /admin/',
+    '', 'User-agent: CCBot', 'Allow: /',
+  ].join('\n');
+  const blocked = aiCrawlersBlocked(robots);
+  assert.ok(blocked.includes('gptbot'), 'GPTBot Disallow: / is blocked');
+  assert.ok(!blocked.includes('ccbot'), 'CCBot is not blocked');
+  assert.ok(!blocked.includes('claudebot'), 'ClaudeBot falls back to * (which only blocks /admin), not blocked at root');
+
+  const blockAll = aiCrawlersBlocked('User-agent: *\nDisallow: /');
+  assert.ok(blockAll.includes('gptbot') && blockAll.includes('claudebot'), 'a wildcard Disallow: / blocks every AI crawler');
+});
+
+test('evaluateAgentReadiness: flags a JS-only shell, missing llms.txt, blocked crawlers', () => {
+  const out = evaluateAgentReadiness({
+    html: '<html><body><div id="root"></div><script src="/app.js"></script></body></html>',
+    hasLlmsTxt: false,
+    robotsTxt: 'User-agent: GPTBot\nDisallow: /',
+    robotsPresent: true,
+    hasAgentManifest: false,
+  });
+  const byId = (id: string) => out.find((f: any) => f.id === id);
+  assert.ok(byId('agent.ssr-content') && !byId('agent.ssr-content').pass, 'JS-only shell fails SSR check');
+  assert.ok(byId('agent.llms-txt') && !byId('agent.llms-txt').pass, 'no llms.txt fails');
+  assert.ok(byId('agent.ai-crawlers') && !byId('agent.ai-crawlers').pass, 'blocked GPTBot fails');
+  assert.ok(byId('agent.structured-data') && !byId('agent.structured-data').pass, 'no JSON-LD fails');
+});
+
+test('evaluateAgentReadiness: an agent-ready page passes', () => {
+  const out = evaluateAgentReadiness({
+    html: '<html><body><h1>My Product</h1><p>' + 'Lots of real server-rendered content. '.repeat(20) + '</p><script type="application/ld+json">{"@type":"Product"}</script></body></html>',
+    hasLlmsTxt: true,
+    robotsTxt: 'User-agent: *\nAllow: /',
+    robotsPresent: true,
+    hasAgentManifest: true,
+  });
+  assert.ok(out.every((f: any) => f.pass), 'a fully agent-ready page has no failures');
+});
+
+test('probe runs the agent category end-to-end', async () => {
+  const srv = await server((req, res) => {
+    if (req.url === '/llms.txt') { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('# My Site\n\n> A helpful site.\n'); return; }
+    if (req.url === '/robots.txt') { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('User-agent: *\nAllow: /\n'); return; }
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end('<html><body><h1>Welcome</h1><p>' + 'Server-rendered words. '.repeat(20) + '</p></body></html>');
+  });
+  const findings = await probe(srv.url, { only: ['agent'] });
+  srv.close();
+  assert.ok(findings.find((f) => f.id === 'agent.llms-txt' && f.pass), 'detects llms.txt');
+  assert.ok(findings.find((f) => f.id === 'agent.ssr-content' && f.pass), 'detects server-rendered content');
+  assert.ok(findings.find((f) => f.id === 'agent.ai-crawlers' && f.pass), 'detects open crawler policy');
 });

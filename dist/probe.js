@@ -4,6 +4,7 @@
 // pass `only`/`skip` to scope it. The result is a flat Finding[] the CLI groups + gates on.
 import { securityChecks, secretChecks, exposureChecks, reliabilityChecks, seoChecks, a11yChecks, performanceChecks, } from './checks.js';
 import { dnsChecks } from './dns.js';
+import { agentChecks } from './agent.js';
 const RUNNERS = {
     security: securityChecks,
     secrets: secretChecks,
@@ -13,6 +14,7 @@ const RUNNERS = {
     seo: seoChecks,
     a11y: a11yChecks,
     performance: performanceChecks,
+    agent: agentChecks,
 };
 export const ALL_CATEGORIES = Object.keys(RUNNERS);
 /** Add https:// when the user typed a bare domain, so `anal-probe example.com` just works. */

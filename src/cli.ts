@@ -41,6 +41,7 @@ const SEV_ICON: Record<Severity, string> = { high: '🟥', medium: '🟧', low: 
 const CAT_TITLE: Record<Category, string> = {
   security: '🔐 Security', secrets: '🔑 Leaked secrets', exposure: '📂 Exposed files & debug',
   dns: '🌐 DNS & email', reliability: '🔗 Reliability', seo: '🔎 SEO', a11y: '♿ Accessibility', performance: '⚡ Performance',
+  agent: '🤖 Agent readiness',
 };
 
 async function runAudit() {

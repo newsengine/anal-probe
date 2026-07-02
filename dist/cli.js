@@ -41,6 +41,7 @@ const SEV_ICON = { high: '🟥', medium: '🟧', low: '🟨', info: 'ℹ️ ' };
 const CAT_TITLE = {
     security: '🔐 Security', secrets: '🔑 Leaked secrets', exposure: '📂 Exposed files & debug',
     dns: '🌐 DNS & email', reliability: '🔗 Reliability', seo: '🔎 SEO', a11y: '♿ Accessibility', performance: '⚡ Performance',
+    agent: '🤖 Agent readiness',
 };
 async function runAudit() {
     const level = arg('--level') || 'high';
