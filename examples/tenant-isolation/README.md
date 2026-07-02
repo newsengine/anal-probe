@@ -12,7 +12,21 @@ each endpoint with the shipped `classifyTenantAccess` logic (unit-tested in the 
 **Strictly read-only:** only `GET`s are observed and rewritten. It never issues a write and never mutates
 another tenant.
 
-## Use
+## Now built in: `anal-probe separation`
+
+This recipe is now a first-class **optional mode** (extra batteries — needs `playwright-core` + Chrome):
+
+```bash
+npm i -D playwright-core
+anal-probe separation config.json     # config = { origin, tenantParam, chromeProfilesDir, appPaths,
+                                       #            owner{label,chromeProfile,tenant}, attacker{...}, endpoints[{name,match}] }
+```
+
+Open the app in **both** Chrome profiles first so their sessions are fresh, then run it. It reports each
+endpoint as `isolated` / `leak` / `inspect` / `inconclusive` (stale sessions → inconclusive, never a false
+pass). The scripts below are the same technique for reference / customization.
+
+## Use (manual scripts)
 
 ```bash
 npm i -D playwright-core        # uses your installed Google Chrome; no browser download

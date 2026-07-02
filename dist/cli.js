@@ -244,6 +244,51 @@ async function runCve() {
     }
     process.exit(hits.some((c) => c.severity === 'CRITICAL' || c.severity === 'HIGH') ? 1 : 0);
 }
+// "Extra batteries" separation-of-accounts test (needs playwright-core + Chrome + a two-account config).
+async function runSeparation() {
+    const configPath = process.argv[3];
+    if (!configPath || configPath.startsWith('-')) {
+        console.error('usage: anal-probe separation <config.json>   (needs: npm i -D playwright-core, + two logged-in Chrome profiles)\n       config: { origin, tenantParam, chromeProfilesDir, appPaths, owner{label,chromeProfile,tenant}, attacker{...}, endpoints[{name,match}] }');
+        process.exit(2);
+        return;
+    }
+    const { runSeparation: run } = await import('./separation.js');
+    let cfg;
+    try {
+        cfg = JSON.parse(readFileSync(configPath, 'utf8'));
+    }
+    catch (e) {
+        console.error(`could not read config ${configPath}: ${String(e?.message || e)}`);
+        process.exit(2);
+        return;
+    }
+    console.error('⚠️  READ-ONLY separation test — drives your two Chrome profiles; never submits forms or mutates data.');
+    console.error(`   Open ${cfg.origin} in both profiles first so their sessions are fresh, then this runs.\n`);
+    let results;
+    try {
+        results = await run(cfg);
+    }
+    catch (e) {
+        console.error('separation error:', String(e?.message || e));
+        process.exit(2);
+        return;
+    }
+    const ICON = { isolated: '✅', leak: '🟥', inspect: '⚠️ ', inconclusive: '⚪' };
+    if (flag('--json')) {
+        console.log(JSON.stringify({ origin: cfg.origin, owner: cfg.owner.label, attacker: cfg.attacker.label, results }, null, 2));
+    }
+    else {
+        console.log(`\n🔐 separation-of-accounts — ${cfg.attacker.label} attempting ${cfg.owner.label}'s data on ${cfg.origin}\n`);
+        for (const r of results) {
+            console.log(`  ${ICON[r.verdict] || '·'} ${r.verdict.toUpperCase().padEnd(12)} ${r.name} — ${r.reason}`);
+            console.log(`        statuses: owner ${r.statuses.baseline ?? '—'} · attacker→owner ${r.statuses.attack ?? '—'} · attacker→own ${r.statuses.control ?? '—'}`);
+        }
+        const leaks = results.filter((r) => r.verdict === 'leak').length;
+        const incon = results.filter((r) => r.verdict === 'inconclusive').length;
+        console.log(`\n${leaks ? '🟥' : '✅'} ${results.length - leaks} isolated · ${leaks} leak(s)${incon ? ` · ${incon} inconclusive (refresh both sessions & retry)` : ''}.\n`);
+    }
+    process.exit(results.some((r) => r.verdict === 'leak') ? 1 : 0);
+}
 async function main() {
     if (process.argv[2] === 'audit')
         return runAudit();
@@ -253,6 +298,8 @@ async function main() {
         return runBrowse();
     if (process.argv[2] === 'cve')
         return runCve();
+    if (process.argv[2] === 'separation')
+        return runSeparation();
     const cfgResult = loadConfig(arg('--config'));
     if (cfgResult.error) {
         console.error(cfgResult.error);
