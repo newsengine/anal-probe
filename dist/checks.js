@@ -93,6 +93,20 @@ export async function securityChecks(ctx) {
     // Cross-Origin-Opener-Policy: cheap isolation win against cross-window attacks (Spectre/XS-Leaks).
     const coop = h.get('cross-origin-opener-policy');
     out.push(f('security', 'header.cross-origin-opener-policy', coop ? 'Has Cross-Origin-Opener-Policy' : 'No Cross-Origin-Opener-Policy', 'low', !!coop, coop ? `cross-origin-opener-policy: ${coop}` : 'no COOP header', coop ? undefined : 'Send Cross-Origin-Opener-Policy: same-origin to isolate your window from cross-origin popups.'));
+    // Cross-Origin-Resource-Policy: the third of the isolation trio (with COOP/COEP) — limits who can embed
+    // your resources. Low, informational.
+    const corp = h.get('cross-origin-resource-policy');
+    out.push(f('security', 'header.cross-origin-resource-policy', corp ? 'Has Cross-Origin-Resource-Policy' : 'No Cross-Origin-Resource-Policy', 'low', !!corp, corp ? `cross-origin-resource-policy: ${corp}` : 'no CORP header', corp ? undefined : 'Send Cross-Origin-Resource-Policy: same-origin (or same-site) so other origins can\'t embed your resources.'));
+    // HTTP methods (WSTG-CONF-06): enumerate via OPTIONS; flag TRACE (Cross-Site Tracing) + risky verbs.
+    const optRes = await safeFetch(origin, { method: 'OPTIONS', headers: ctx.opts.extraHeaders });
+    if (optRes) {
+        const allow = (optRes.headers.get('allow') || optRes.headers.get('access-control-allow-methods') || '').toUpperCase();
+        if (allow) {
+            const risky = ['TRACE', 'TRACK', 'CONNECT', 'PUT', 'DELETE', 'PATCH'].filter((m) => allow.includes(m));
+            const hasTrace = allow.includes('TRACE') || allow.includes('TRACK');
+            out.push(f('security', 'http.methods', hasTrace ? 'TRACE/TRACK method enabled (XST)' : risky.length ? `Extra HTTP methods allowed: ${risky.join(', ')}` : 'HTTP methods look restrained', hasTrace ? 'medium' : 'low', !hasTrace && risky.length === 0, `Allow: ${allow}`, hasTrace ? 'Disable TRACE/TRACK at the server — they enable Cross-Site Tracing (XST) and echo request headers.' : risky.length ? 'Ensure write verbs (PUT/DELETE/PATCH) are auth-gated and only exposed where intended.' : undefined));
+        }
+    }
     // CSP linting: grade the policy that IS set (enforced, or Report-Only when the caller accepts it).
     const cspToLint = h.get('content-security-policy') || (ctx.opts.allowReportOnlyCsp ? h.get('content-security-policy-report-only') : null);
     if (cspToLint) {

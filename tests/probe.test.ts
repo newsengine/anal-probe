@@ -358,6 +358,17 @@ test('security: flags missing Permissions-Policy, COOP, and non-preloadable HSTS
   assert.ok(findings.find((f) => f.id === 'tls.hsts-preload' && !f.pass), 'short HSTS is not preload-eligible');
 });
 
+test('security: flags TRACE (XST) via OPTIONS and missing CORP', async () => {
+  const srv = await server((req, res) => {
+    if (req.method === 'OPTIONS') { res.writeHead(204, { allow: 'GET, POST, OPTIONS, TRACE' }); res.end(); return; }
+    res.writeHead(200, { 'content-type': 'text/html' }); res.end('<html>ok</html>');
+  });
+  const findings = await probe(srv.url, { only: ['security'] });
+  srv.close();
+  assert.ok(findings.find((f) => f.id === 'http.methods' && !f.pass && /TRACE/.test(f.title)), 'flags TRACE/TRACK (XST)');
+  assert.ok(findings.find((f) => f.id === 'header.cross-origin-resource-policy' && !f.pass), 'flags missing CORP');
+});
+
 test('security: HSTS preload-eligible header passes', async () => {
   const srv = await server((_req, res) => {
     res.writeHead(200, { 'content-type': 'text/html', 'strict-transport-security': 'max-age=31536000; includeSubDomains; preload' });
