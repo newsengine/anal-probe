@@ -17,7 +17,7 @@ import { evaluateAgentReadiness, visibleText, aiCrawlersBlocked } from '../dist/
 import { detectStacks } from '../dist/detect.js';
 import { gradeTlsProtocol, gradeTlsCipher } from '../dist/core.js';
 import { identifyEdge } from '../dist/host.js';
-import { scanPort, parsePorts } from '../dist/active.js';
+import { scanPort, parsePorts, identifyBanner } from '../dist/active.js';
 import net from 'node:net';
 
 function server(handler: http.RequestListener): Promise<{ url: string; close: () => void }> {
@@ -658,6 +658,14 @@ test('parsePorts handles common/all/list/garbage', () => {
   assert.equal(parsePorts('all').length, 65535);
   assert.deepEqual(parsePorts('22,80,443'), [22, 80, 443]);
   assert.deepEqual(parsePorts('bad,99999,-1,0'), [], 'invalid ports are dropped');
+});
+
+test('identifyBanner extracts product + version for CVE lookup', () => {
+  assert.deepEqual(identifyBanner('SSH-2.0-OpenSSH_8.9p1 Ubuntu'), { product: 'OpenSSH', version: '8.9p1' });
+  assert.deepEqual(identifyBanner('Server: nginx/1.18.0'), { product: 'nginx', version: '1.18.0' });
+  assert.equal(identifyBanner('Server: cloudflare').product, 'cloudflare');
+  assert.equal(identifyBanner('220 ProFTPD 1.3.5 Server').product, 'ProFTPD');
+  assert.deepEqual(identifyBanner(''), {}, 'no banner → nothing');
 });
 
 test('scanPort detects an open port (with banner) and a closed one', async () => {

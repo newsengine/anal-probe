@@ -1,0 +1,22 @@
+{
+  "_comment": "Starter preset for a Ruby on Rails app. Adapt paths + roles, set tokens via env.",
+  "baseURL": "https://your-rails-app.example.com",
+  "actors": {
+    "anonymous": {},
+    "user": { "headers": { "authorization": "Bearer ${USER_TOKEN}" } },
+    "admin": { "headers": { "authorization": "Bearer ${ADMIN_TOKEN}" } }
+  },
+  "protectedEndpoints": [
+    { "name": "admin namespace", "method": "GET", "path": "/admin", "allow": ["admin"] },
+    { "name": "sidekiq dashboard", "method": "GET", "path": "/sidekiq", "allow": ["admin"] },
+    { "name": "user posts require login", "method": "GET", "path": "/posts.json", "allow": ["user", "admin"] }
+  ],
+  "ownerScopedLists": [
+    { "name": "posts are owner-scoped", "method": "GET", "path": "/posts.json", "idRegex": "\"id\"\\s*:\\s*(\\d+)", "userA": "user", "userB": "admin" }
+  ],
+  "massAssignment": [
+    { "name": "user_id not client-writable (strong params)", "method": "POST", "path": "/posts.json", "as": "user", "body": { "post": { "title": "probe", "user_id": 999999 } }, "forgedValue": "999999" },
+    { "name": "admin flag not assignable", "method": "POST", "path": "/posts.json", "as": "user", "body": { "post": { "title": "probe", "published": true } }, "forgedValue": "\"published\":true" }
+  ],
+  "sensitiveFields": ["password", "encrypted_password", "password_digest", "access_token", "secret_key_base"]
+}

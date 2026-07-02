@@ -1,0 +1,21 @@
+{
+  "_comment": "Starter preset for a Laravel app. Adapt paths + roles, set tokens via env.",
+  "baseURL": "https://your-laravel-app.example.com",
+  "actors": {
+    "anonymous": {},
+    "user": { "headers": { "authorization": "Bearer ${USER_TOKEN}", "accept": "application/json" } },
+    "admin": { "headers": { "authorization": "Bearer ${ADMIN_TOKEN}", "accept": "application/json" } }
+  },
+  "protectedEndpoints": [
+    { "name": "admin panel", "method": "GET", "path": "/admin", "allow": ["admin"] },
+    { "name": "telescope (should be locked down)", "method": "GET", "path": "/telescope/requests", "allow": ["admin"] },
+    { "name": "user resources require login", "method": "GET", "path": "/api/posts", "allow": ["user", "admin"] }
+  ],
+  "ownerScopedLists": [
+    { "name": "posts are owner-scoped", "method": "GET", "path": "/api/posts", "idRegex": "\"id\"\\s*:\\s*(\\d+)", "userA": "user", "userB": "admin" }
+  ],
+  "massAssignment": [
+    { "name": "user_id not mass-assignable ($fillable)", "method": "POST", "path": "/api/posts", "as": "user", "body": { "title": "probe", "user_id": 999999 }, "forgedValue": "999999" }
+  ],
+  "sensitiveFields": ["password", "remember_token", "api_token", "access_token", "app_key"]
+}

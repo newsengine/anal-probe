@@ -29,6 +29,15 @@ node examples/security-suite/run.mjs examples/security-suite/config.json
 
 Exit code is non-zero if any check fails, so it drops straight into CI. `config.json` is git-ignored.
 
+**Framework presets:** `presets/` has starter configs per stack (`nextjs.json`, `rails.json`,
+`laravel.json`) with the endpoints/fields those frameworks typically expose. Copy one, adapt the paths
+and roles to your app, and set tokens via env:
+
+```bash
+export USER_TOKEN=…  ADMIN_TOKEN=…
+node examples/security-suite/run.mjs examples/security-suite/presets/rails.json
+```
+
 ## What was deliberately dropped (app-specific, not generalizable)
 
 Audit-log schema/filtering, session-persistence UI flows, health-endpoint schema, OAuth-callback origin
