@@ -143,9 +143,39 @@ async function runRecon() {
   process.exit(result.open.some((p) => p.service?.severity === 'high') ? 1 : 0);
 }
 
+// OPT-IN browser-functional mode (needs playwright-core): JS errors, broken images, failed requests,
+// forms accepting input — across pages. Catches aberrant behaviour a fetch scan can't see.
+async function runBrowse() {
+  const target = process.argv[3];
+  if (!target || target.startsWith('-')) { console.error('usage: anal-probe browse <url> [--pages N] [--timeout ms] [--json] [--quiet]  (needs: npm i -D playwright-core)'); process.exit(2); return; }
+  const { browseChecks } = await import('./browse.js');
+  const url = normalizeUrl(target);
+  const pagesRaw = arg('--pages');
+  const tRaw = arg('--timeout');
+  const findings = await browseChecks(url, {
+    pages: pagesRaw && Number(pagesRaw) > 0 ? Number(pagesRaw) : 1,
+    timeoutMs: tRaw && Number(tRaw) > 0 ? Number(tRaw) : undefined,
+  });
+  const sum = summarize(findings);
+  if (flag('--json')) { console.log(JSON.stringify({ url, summary: sum, findings }, null, 2)); }
+  else {
+    const quiet = flag('--quiet');
+    console.log(`\n🖥️  anal-probe browse — functional check of ${url}\n`);
+    for (const fnd of findings) {
+      if (quiet && fnd.pass) continue;
+      console.log(`  ${fnd.pass ? '✅' : SEV_ICON[fnd.severity]} [${fnd.severity.toUpperCase()}] ${fnd.title}`);
+      console.log(`        ${fnd.detail}`);
+      if (!fnd.pass && fnd.fix) console.log(`        ↳ fix: ${fnd.fix}`);
+    }
+    console.log(`\n${sum.passed} passed, ${sum.failed} failed  (🟥 ${sum.failHigh} · 🟧 ${sum.failMedium} · 🟨 ${sum.failLow})\n`);
+  }
+  process.exit(findings.some((fnd) => !fnd.pass && fnd.severity === 'high') ? 1 : 0);
+}
+
 async function main() {
   if (process.argv[2] === 'audit') return runAudit();
   if (process.argv[2] === 'recon') return runRecon();
+  if (process.argv[2] === 'browse') return runBrowse();
 
   const cfgResult = loadConfig(arg('--config'));
   if (cfgResult.error) { console.error(cfgResult.error); process.exit(2); }
