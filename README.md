@@ -11,9 +11,13 @@ npx github:newsengine/anal-probe https://your-app.example.com
 Built for vibe coders shipping with AI: you don't need to know what to look for — the scanner does, and
 every failing finding comes with a one-line **fix**. Exits non-zero so it doubles as a CI gate.
 
-- **Full black-box scan** — 9 categories (below), all from a URL.
+- **Full black-box scan** — 10 categories (below), all from a URL.
 - **Framework-aware**: fingerprints the stack (Next.js/WordPress/Laravel/Django/Rails/Spring/ASP.NET) and
   runs targeted checks for its known misconfigs — only when confidently detected.
+- **Host intel** (passive): resolved IPs, reverse DNS, CDN/hosting provider — no scanning.
+- **Opt-in aggressive modes** (off by default): `recon` (authorization-gated, CDN-guarded port scan +
+  service ID — identify-only, never exploit) and `browse` (headless-browser functional check: JS errors,
+  broken images, failed requests, forms accepting input — needs `playwright-core`).
 - **White-box helpers** (`idorProbe`, `rbacProbe`, `dataIsolationProbe`, `massAssignmentProbe`,
   `classifyTenantAccess`, `findSensitiveFields`, `checkSecurityHeaders`, `checkCookieFlags`, `scanSecrets`):
   import into your own test suite (jest/vitest/node:test) for RBAC, cross-tenant/IDOR, mass-assignment,
@@ -148,7 +152,7 @@ node .kit/dist/cli.js https://your-deploy.example.com --baseline probe-baseline.
 
 ## Use the CLI locally / ad-hoc
 ```bash
-# full scan (all 9 categories)
+# full scan (all 10 categories)
 npx github:newsengine/anal-probe https://app.example.com
 
 # scope it, gate harder, test CORS, machine-readable output
