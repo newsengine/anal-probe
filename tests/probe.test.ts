@@ -19,6 +19,7 @@ import { gradeTlsProtocol, gradeTlsCipher } from '../dist/core.js';
 import { identifyEdge } from '../dist/host.js';
 import { scanPort, parsePorts, identifyBanner } from '../dist/active.js';
 import { parseNvd } from '../dist/cve.js';
+import { refsFor, asvsCoverage } from '../dist/compliance.js';
 import net from 'node:net';
 
 function server(handler: http.RequestListener): Promise<{ url: string; close: () => void }> {
@@ -661,6 +662,32 @@ test('gradeTlsCipher flags weak/legacy ciphers, passes AEAD', () => {
   assert.equal(gradeTlsCipher('ECDHE-RSA-DES-CBC3-SHA').ok, false);
   assert.equal(gradeTlsCipher('TLS_AES_256_GCM_SHA384').ok, true);
   assert.equal(gradeTlsCipher('ECDHE-RSA-CHACHA20-POLY1305').ok, true);
+});
+
+// ═══════════════════════ OWASP / ASVS compliance mapping ═══════════════════
+
+test('refsFor maps findings to standards by longest prefix', () => {
+  assert.equal(refsFor('tls.protocol').asvs?.[0], 'V9.1.3');
+  assert.equal(refsFor('header.content-security-policy').asvs?.[0], 'V14.4.3');
+  assert.equal(refsFor('cookie-prefix.sid').asvs?.[0], 'V3.4.4', 'cookie-prefix beats cookie');
+  assert.equal(refsFor('cookie.sid').owasp, 'A05');
+  assert.equal(refsFor('exposed/backup.zip').asvs?.includes('V12.5.1'), true);
+  assert.deepEqual(refsFor('totally.unknown.id'), {}, 'unknown id → no refs');
+});
+
+test('asvsCoverage: pass/fail/cleanSignal/not-observed', () => {
+  const findings = [
+    { id: 'tls.protocol', category: 'security', title: 't', severity: 'info', pass: true, detail: '' },
+    { id: 'header.content-security-policy', category: 'security', title: 't', severity: 'high', pass: false, detail: '' },
+    { id: 'exposure.none', category: 'exposure', title: 't', severity: 'info', pass: true, detail: '' },
+  ];
+  const cov = asvsCoverage(findings);
+  const by = (id) => cov.find((r) => r.id === id);
+  assert.equal(by('V9.1.3').status, 'pass', 'passing tls.protocol → pass');
+  assert.equal(by('V14.4.3').status, 'fail', 'failing CSP → fail');
+  assert.equal(by('V12.5.1').status, 'pass', 'clean exposure.none satisfies the backup-files req');
+  assert.equal(by('V14.4.4').status, 'not-observed', 'nosniff never observed here');
+  assert.equal(by('V3.4.5').status, 'not-covered', 'cookie-path is an honest gap');
 });
 
 // ═══════════════════════ active recon (identify-only) ══════════════════════

@@ -12,5 +12,6 @@ export { detectStacks } from './detect.js';
 export { frameworkChecks } from './framework.js';
 export { hostChecks, identifyEdge } from './host.js';
 export { lookupCves, parseNvd } from './cve.js';
+export { refsFor, asvsCoverage, owaspTop10Hit, ASVS_L1, OWASP_TOP10_NAMES, } from './compliance.js';
 export { agentChecks, evaluateAgentReadiness, visibleText, aiCrawlersBlocked, AI_CRAWLERS, } from './agent.js';
 export { findingKey, buildBaseline, applyBaseline, } from './baseline.js';

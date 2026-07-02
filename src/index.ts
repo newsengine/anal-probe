@@ -32,6 +32,10 @@ export { frameworkChecks } from './framework.js';
 export { hostChecks, identifyEdge } from './host.js';
 export { lookupCves, parseNvd, type CveHit } from './cve.js';
 export {
+  refsFor, asvsCoverage, owaspTop10Hit, ASVS_L1, OWASP_TOP10_NAMES,
+  type StandardRefs, type AsvsReq, type AsvsResult, type AsvsStatus,
+} from './compliance.js';
+export {
   agentChecks, evaluateAgentReadiness, visibleText, aiCrawlersBlocked, AI_CRAWLERS,
   type AgentReadinessInput,
 } from './agent.js';

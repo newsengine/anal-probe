@@ -24,6 +24,7 @@ import { runNpmAudit, failsAtLevel } from './audit.js';
 import { toSarif } from './sarif.js';
 import { buildBaseline, applyBaseline } from './baseline.js';
 import { loadConfig } from './config.js';
+import { asvsCoverage, owaspTop10Hit, refsFor, OWASP_TOP10_NAMES } from './compliance.js';
 import { recon, parsePorts } from './active.js';
 import { identifyEdge } from './host.js';
 import { lookupCves } from './cve.js';
@@ -260,7 +261,7 @@ async function main() {
     const config = cfgResult.config;
     const rawUrl = process.argv[2];
     if (!rawUrl || rawUrl.startsWith('-')) {
-        console.error('usage:\n  npx github:newsengine/anal-probe <url> [--only ...] [--skip ...] [--cors-path <p>] [--rate-limit-path <p>] [--timeout <ms>] [--cookie "<raw cookie>"] [--header "K: V"] [--crawl <N>] [--urls <file>] [--config <file>] [--fail-on high|medium|any] [--json] [--quiet]\n  npx github:newsengine/anal-probe audit [--prod] [--level low|moderate|high|critical] [--json]');
+        console.error('usage:\n  npx github:newsengine/anal-probe <url> [--only ...] [--skip ...] [--cors-path <p>] [--rate-limit-path <p>] [--timeout <ms>] [--cookie "<raw cookie>"] [--header "K: V"] [--crawl <N>] [--urls <file>] [--config <file>] [--fail-on high|medium|any] [--compliance] [--json] [--quiet]\n  npx github:newsengine/anal-probe audit [--prod] [--level low|moderate|high|critical] [--json]');
         process.exit(2);
     }
     const url = normalizeUrl(rawUrl); // accept bare domains (example.com -> https://example.com)
@@ -370,7 +371,8 @@ async function main() {
         console.log(JSON.stringify(toSarif(diff ? diff.newFailures : findings, { url, version: VERSION }), null, 2));
     }
     else if (flag('--json')) {
-        console.log(JSON.stringify({ url, summary: sum, findings, ...(diff ? { baseline: { new: diff.newFailures.length, accepted: diff.baselined.length } } : {}) }, null, 2));
+        const withStd = flag('--compliance') ? findings.map((f) => ({ ...f, standards: refsFor(f.id) })) : findings;
+        console.log(JSON.stringify({ url, summary: sum, findings: withStd, ...(flag('--compliance') ? { compliance: { asvsL1: asvsCoverage(findings), owaspTop10: owaspTop10Hit(findings) } } : {}), ...(diff ? { baseline: { new: diff.newFailures.length, accepted: diff.baselined.length } } : {}) }, null, 2));
     }
     else {
         // --quiet: show only failures (good for CI logs); default shows passes too so a clean scan is visible.
@@ -398,6 +400,23 @@ async function main() {
         if (diff)
             console.log(`baseline: ${diff.newFailures.length} new · ${diff.baselined.length} accepted`);
         console.log('');
+        if (flag('--compliance')) {
+            const cov = asvsCoverage(findings);
+            const n = (s) => cov.filter((r) => r.status === s).length;
+            const ICON = { pass: '✅', fail: '🟥', 'not-observed': '⚪', 'not-covered': '➖' };
+            console.log('📋 OWASP ASVS 4.0.3 — Level 1 (black-box subset)');
+            console.log(`   ${n('pass')} pass · ${n('fail')} fail · ${n('not-observed')} not-observed · ${n('not-covered')} not-covered  (of ${cov.length})`);
+            for (const r of cov)
+                console.log(`   ${ICON[r.status]} ${r.id}  ${r.text}`);
+            const hits = owaspTop10Hit(findings);
+            const keys = Object.keys(hits).sort();
+            console.log(`\n🔟 OWASP Top 10 (2021) — categories with open issues`);
+            if (!keys.length)
+                console.log('   none');
+            for (const k of keys)
+                console.log(`   ${k} ${OWASP_TOP10_NAMES[k]} — ${hits[k]} issue(s)`);
+            console.log('');
+        }
     }
     const gHigh = gateFails.filter((f) => f.severity === 'high').length;
     const gMed = gateFails.filter((f) => f.severity === 'medium').length;

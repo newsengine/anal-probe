@@ -21,6 +21,8 @@ every failing finding comes with a one-line **fix**. Exits non-zero so it double
   input — needs `playwright-core`).
 - **CVE checks**: `audit` covers dependency CVEs (npm advisory DB); `recon --cve` / `anal-probe cve
   <product> <version>` correlate detected service versions against NVD.
+- **Standards mapping** (`--compliance`): reports coverage against **OWASP ASVS 4.0.3 Level 1**
+  (23/25 black-box requirements), **OWASP Top 10 (2021)**, and **WSTG** — see [docs/compliance.md](docs/compliance.md).
 - **White-box helpers** (`idorProbe`, `rbacProbe`, `dataIsolationProbe`, `massAssignmentProbe`,
   `classifyTenantAccess`, `findSensitiveFields`, `checkSecurityHeaders`, `checkCookieFlags`, `scanSecrets`):
   import into your own test suite (jest/vitest/node:test) for RBAC, cross-tenant/IDOR, mass-assignment,

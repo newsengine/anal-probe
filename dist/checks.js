@@ -97,6 +97,19 @@ export async function securityChecks(ctx) {
     // your resources. Low, informational.
     const corp = h.get('cross-origin-resource-policy');
     out.push(f('security', 'header.cross-origin-resource-policy', corp ? 'Has Cross-Origin-Resource-Policy' : 'No Cross-Origin-Resource-Policy', 'low', !!corp, corp ? `cross-origin-resource-policy: ${corp}` : 'no CORP header', corp ? undefined : 'Send Cross-Origin-Resource-Policy: same-origin (or same-site) so other origins can\'t embed your resources.'));
+    // Content-Type + charset on the document (ASVS V14.4.1) — a missing charset on text/html invites
+    // sniffing/UTF-7-style issues.
+    const docCt = h.get('content-type') || '';
+    const isText = /text\/html|application\/xhtml/i.test(docCt);
+    const ctOk = !!docCt && (!isText || /charset=/i.test(docCt));
+    out.push(f('security', 'header.content-type', docCt ? (ctOk ? `Content-Type set (${docCt})` : 'Content-Type missing charset') : 'No Content-Type header', ctOk ? 'info' : 'low', ctOk, docCt || 'response had no Content-Type', ctOk ? undefined : 'Send a Content-Type with an explicit charset (e.g. text/html; charset=utf-8).'));
+    // Anti-caching on authenticated responses (ASVS V8.2.1) — only meaningful when we're scanning behind
+    // login; a shared cache/browser must not retain private pages.
+    if (ctx.opts.extraHeaders) {
+        const cc = h.get('cache-control') || '';
+        const safe = /no-store|no-cache|private/i.test(cc);
+        out.push(f('security', 'cache.sensitive', safe ? 'Authenticated response is non-cacheable' : 'Authenticated response lacks anti-caching headers', 'medium', safe, `cache-control: ${cc || '(none)'}`, safe ? undefined : 'On authenticated/sensitive pages send Cache-Control: no-store so private data isn\'t cached by browsers or shared proxies.'));
+    }
     // HTTP methods (WSTG-CONF-06): enumerate via OPTIONS; flag TRACE (Cross-Site Tracing) + risky verbs.
     const optRes = await safeFetch(origin, { method: 'OPTIONS', headers: ctx.opts.extraHeaders });
     if (optRes) {
@@ -115,12 +128,16 @@ export async function securityChecks(ctx) {
         }
     }
     // Version-banner disclosure
+    let disclosed = false;
     for (const banner of ['server', 'x-powered-by']) {
         const v = h.get(banner);
         if (v && /\d/.test(v)) {
+            disclosed = true;
             out.push(f('security', `disclosure.${banner}`, `Version banner in ${banner}`, 'low', false, `${banner}: ${v}`, `Strip the ${banner} header so you don't advertise exact versions to attackers.`));
         }
     }
+    if (!disclosed)
+        out.push(f('security', 'disclosure.none', 'No version banners disclosed', 'info', true, 'no numeric Server/X-Powered-By version'));
     // Cookie flags
     const setCookie = h.getSetCookie?.();
     if (setCookie?.length) {
@@ -285,6 +302,16 @@ const EXPOSED_PATHS = [
     { path: '/api-docs', severity: 'medium', label: 'Swagger/OpenAPI docs', looksReal: (b) => /swagger-ui|"(?:swagger|openapi)"\s*:/i.test(b) },
     { path: '/.aws/credentials', severity: 'high', label: 'AWS credentials file', looksReal: (b) => /aws_access_key_id/i.test(b) && !/<html/i.test(b) },
     { path: '/config.json', severity: 'medium', label: 'config.json', looksReal: (b, ct) => ct.includes('json') && /"(?:apiKey|secret|password|token|database|db)"/i.test(b) },
+    // Backup / temp / archive files left in the webroot (ASVS V12.5.1). Validated by content-type / magic
+    // bytes / source markers so an SPA/404 fallback doesn't false-positive.
+    { path: '/.env.bak', severity: 'high', label: '.env backup', looksReal: (b) => /^[A-Za-z_][A-Za-z0-9_]*\s*=/m.test(b) && !/<html/i.test(b) },
+    { path: '/backup.zip', severity: 'high', label: 'backup.zip', looksReal: (b, ct) => ct.includes('zip') || b.startsWith('PK\x03\x04') },
+    { path: '/backup.tar.gz', severity: 'high', label: 'backup.tar.gz', looksReal: (b, ct) => ct.includes('gzip') || ct.includes('tar') || b.startsWith('\x1f\x8b') },
+    { path: '/backup.sql.gz', severity: 'high', label: 'backup.sql.gz', looksReal: (b, ct) => ct.includes('gzip') || b.startsWith('\x1f\x8b') },
+    { path: '/.git.zip', severity: 'high', label: '.git archive', looksReal: (b, ct) => ct.includes('zip') || b.startsWith('PK\x03\x04') },
+    { path: '/config.php.bak', severity: 'high', label: 'config.php backup', looksReal: (b) => /<\?php/.test(b) },
+    { path: '/index.php.bak', severity: 'medium', label: 'index.php backup', looksReal: (b) => /<\?php/.test(b) },
+    { path: '/web.config.bak', severity: 'high', label: 'web.config backup', looksReal: (b) => /<configuration|<connectionStrings/i.test(b) },
 ];
 // Directories that are commonly mis-served with autoindex on, leaking internal file structure.
 const LISTABLE_DIRS = ['/uploads/', '/files/', '/backup/', '/backups/', '/.git/', '/static/', '/assets/', '/data/'];
