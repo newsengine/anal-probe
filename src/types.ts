@@ -14,7 +14,8 @@ export type Category =
   | 'seo'          // title/description/canonical/robots/sitemap
   | 'a11y'         // lang, alt text, labels, viewport
   | 'performance'  // compression, caching, page weight
-  | 'agent';       // agent-readiness: llms.txt, AI-crawler policy, SSR content, structured data
+  | 'agent'        // agent-readiness: llms.txt, AI-crawler policy, SSR content, structured data
+  | 'framework';   // stack-specific misconfigs (Next.js/WordPress/Laravel/Django/Rails/Spring/ASP.NET)
 
 export interface Finding {
   id: string;
@@ -61,4 +62,7 @@ export interface ScanContext {
   html: string;
   headers: Headers;
   opts: ScanOptions;
+  /** Frameworks/platforms fingerprinted from the homepage (populated by the scanner; used by the
+   *  `framework` category and available for reporting). */
+  stacks?: import('./detect.js').StackSignal[];
 }

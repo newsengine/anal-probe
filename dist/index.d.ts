@@ -6,5 +6,7 @@ export { runNpmAudit, failsAtLevel, type AuditResult, } from './audit.js';
 export { lintCsp, type CspIssue } from './checks.js';
 export { dnsChecks, gatherDns, evaluateDnsHygiene, apexOf, type DnsRecords, } from './dns.js';
 export { toSarif, type SarifOptions } from './sarif.js';
+export { detectStacks, type StackName, type StackSignal, type DetectInput } from './detect.js';
+export { frameworkChecks } from './framework.js';
 export { agentChecks, evaluateAgentReadiness, visibleText, aiCrawlersBlocked, AI_CRAWLERS, type AgentReadinessInput, } from './agent.js';
 export { findingKey, buildBaseline, applyBaseline, type Baseline, type BaselineDiff, } from './baseline.js';

@@ -42,6 +42,7 @@ const CAT_TITLE: Record<Category, string> = {
   security: '🔐 Security', secrets: '🔑 Leaked secrets', exposure: '📂 Exposed files & debug',
   dns: '🌐 DNS & email', reliability: '🔗 Reliability', seo: '🔎 SEO', a11y: '♿ Accessibility', performance: '⚡ Performance',
   agent: '🤖 Agent readiness',
+  framework: '🧩 Framework-specific',
 };
 
 async function runAudit() {

@@ -9,6 +9,8 @@ import {
 } from './checks.js';
 import { dnsChecks } from './dns.js';
 import { agentChecks } from './agent.js';
+import { frameworkChecks } from './framework.js';
+import { detectStacks } from './detect.js';
 
 export type { Category, Finding, ScanContext, ScanOptions, Severity };
 // Back-compat alias: ProbeOptions was the old name.
@@ -24,6 +26,7 @@ const RUNNERS: Record<Category, (ctx: ScanContext) => Promise<Finding[]>> = {
   a11y: a11yChecks,
   performance: performanceChecks,
   agent: agentChecks,
+  framework: frameworkChecks,
 };
 
 export const ALL_CATEGORIES = Object.keys(RUNNERS) as Category[];
@@ -53,7 +56,8 @@ async function buildContext(baseUrl: string, opts: ScanOptions): Promise<ScanCon
   } finally {
     clearTimeout(timer);
   }
-  return { baseUrl, origin: url.origin, url, res, html, headers, opts };
+  const stacks = detectStacks({ html, headers, setCookie: (headers as any).getSetCookie?.() ?? [] });
+  return { baseUrl, origin: url.origin, url, res, html, headers, opts, stacks };
 }
 
 /** Run the comprehensive scan. Returns every finding across the selected categories. */

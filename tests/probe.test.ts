@@ -12,6 +12,7 @@ import { toSarif } from '../dist/sarif.js';
 import { buildBaseline, applyBaseline } from '../dist/baseline.js';
 import { evaluateDnsHygiene, apexOf } from '../dist/dns.js';
 import { evaluateAgentReadiness, visibleText, aiCrawlersBlocked } from '../dist/agent.js';
+import { detectStacks } from '../dist/detect.js';
 
 function server(handler: http.RequestListener): Promise<{ url: string; close: () => void }> {
   return new Promise((resolve) => {
@@ -580,4 +581,57 @@ test('findSensitiveFields spots secret keys in a response body', () => {
   assert.deepEqual(findSensitiveFields('{"user":"x","access_token":"ey..."}').sort(), ['access_token']);
   assert.ok(findSensitiveFields('{"password_hash":"$2b$10$...","role":"admin"}').includes('password_hash'));
   assert.deepEqual(findSensitiveFields('{"id":1,"name":"ok"}'), [], 'clean body has none');
+});
+
+// ═══════════════════════ framework fingerprinting (#14) ═════════════════════
+
+const hdr = (o) => new Headers(o);
+
+test('detectStacks fingerprints Next.js, WordPress, Laravel, Spring with high confidence', () => {
+  const next = detectStacks({ html: '<script id="__NEXT_DATA__" type="application/json">{}</script>', headers: hdr({}), setCookie: [] });
+  assert.equal(next.find((s) => s.name === 'Next.js')?.confidence, 'high');
+
+  const wp = detectStacks({ html: '<link href="/wp-content/themes/x/style.css"><meta name="generator" content="WordPress 6.4">', headers: hdr({}), setCookie: [] });
+  assert.equal(wp.find((s) => s.name === 'WordPress')?.confidence, 'high');
+
+  const laravel = detectStacks({ html: '<html></html>', headers: hdr({}), setCookie: ['laravel_session=abc; path=/'] });
+  assert.equal(laravel.find((s) => s.name === 'Laravel')?.confidence, 'high');
+
+  const spring = detectStacks({ html: '', headers: hdr({ 'x-application-context': 'application:prod' }), setCookie: ['JSESSIONID=x'] });
+  assert.equal(spring.find((s) => s.name === 'Spring Boot')?.confidence, 'high');
+});
+
+test('detectStacks does not fingerprint a plain static site', () => {
+  const s = detectStacks({ html: '<html><body><h1>hello</h1></body></html>', headers: hdr({}), setCookie: [] });
+  assert.equal(s.filter((x) => x.confidence === 'high').length, 0, 'no false-positive stack on a plain page');
+});
+
+test('framework category: probes WordPress user-enum only when WP is detected', async () => {
+  // A "WordPress" server that leaks the REST user list.
+  const wp = await server((req, res) => {
+    if (req.url === '/wp-json/wp/v2/users') { res.writeHead(200, { 'content-type': 'application/json' }); res.end('[{"id":1,"slug":"admin","name":"Admin"}]'); return; }
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end('<html><head><meta name="generator" content="WordPress 6.4"></head><body><img src="/wp-content/x.png"></body></html>');
+  });
+  const findings = await probe(wp.url, { only: ['framework'] });
+  wp.close();
+  assert.ok(findings.find((f) => f.id === 'framework.detected' && /WordPress/.test(f.detail)), 'reports WordPress detected');
+  assert.ok(findings.find((f) => f.id === 'framework.wp.user-enum' && !f.pass), 'flags REST user enumeration');
+
+  // A plain site: framework category should NOT probe wp-json and should report nothing fingerprinted.
+  const plain = await server((_req, res) => { res.writeHead(200, { 'content-type': 'text/html' }); res.end('<html><body>plain</body></html>'); });
+  const pf = await probe(plain.url, { only: ['framework'] });
+  plain.close();
+  assert.ok(pf.find((f) => f.id === 'framework.none' && f.pass), 'no framework fingerprinted on a plain site');
+  assert.ok(!pf.some((f) => f.id === 'framework.wp.user-enum'), 'does not run WP checks on a non-WP site');
+});
+
+test('framework category: flags secrets serialized into Next.js __NEXT_DATA__', async () => {
+  const srv = await server((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end('<html><body><script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"access_token":"ey-leaked"}}}</script></body></html>');
+  });
+  const findings = await probe(srv.url, { only: ['framework'] });
+  srv.close();
+  assert.ok(findings.find((f) => f.id === 'framework.next.data-secrets' && !f.pass), 'flags a secret in __NEXT_DATA__');
 });

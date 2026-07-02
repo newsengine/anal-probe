@@ -1,6 +1,6 @@
 export type Severity = 'high' | 'medium' | 'low' | 'info';
 /** Buckets a vibe coder actually cares about: "is it broken / leaking / unfindable / slow?". */
-export type Category = 'security' | 'secrets' | 'exposure' | 'dns' | 'reliability' | 'seo' | 'a11y' | 'performance' | 'agent';
+export type Category = 'security' | 'secrets' | 'exposure' | 'dns' | 'reliability' | 'seo' | 'a11y' | 'performance' | 'agent' | 'framework';
 export interface Finding {
     id: string;
     category: Category;
@@ -44,4 +44,7 @@ export interface ScanContext {
     html: string;
     headers: Headers;
     opts: ScanOptions;
+    /** Frameworks/platforms fingerprinted from the homepage (populated by the scanner; used by the
+     *  `framework` category and available for reporting). */
+    stacks?: import('./detect.js').StackSignal[];
 }

@@ -5,6 +5,8 @@
 import { securityChecks, secretChecks, exposureChecks, reliabilityChecks, seoChecks, a11yChecks, performanceChecks, } from './checks.js';
 import { dnsChecks } from './dns.js';
 import { agentChecks } from './agent.js';
+import { frameworkChecks } from './framework.js';
+import { detectStacks } from './detect.js';
 const RUNNERS = {
     security: securityChecks,
     secrets: secretChecks,
@@ -15,6 +17,7 @@ const RUNNERS = {
     a11y: a11yChecks,
     performance: performanceChecks,
     agent: agentChecks,
+    framework: frameworkChecks,
 };
 export const ALL_CATEGORIES = Object.keys(RUNNERS);
 /** Add https:// when the user typed a bare domain, so `anal-probe example.com` just works. */
@@ -43,7 +46,8 @@ async function buildContext(baseUrl, opts) {
     finally {
         clearTimeout(timer);
     }
-    return { baseUrl, origin: url.origin, url, res, html, headers, opts };
+    const stacks = detectStacks({ html, headers, setCookie: headers.getSetCookie?.() ?? [] });
+    return { baseUrl, origin: url.origin, url, res, html, headers, opts, stacks };
 }
 /** Run the comprehensive scan. Returns every finding across the selected categories. */
 export async function probe(baseUrl, opts = {}) {

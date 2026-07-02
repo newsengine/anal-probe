@@ -11,9 +11,13 @@ npx github:newsengine/anal-probe https://your-app.example.com
 Built for vibe coders shipping with AI: you don't need to know what to look for — the scanner does, and
 every failing finding comes with a one-line **fix**. Exits non-zero so it doubles as a CI gate.
 
-- **Full black-box scan** — 8 categories (below), all from a URL.
-- **White-box helpers** (`idorProbe`, `checkSecurityHeaders`, `checkCookieFlags`, `scanSecrets`): import
-  into your own test suite (jest/vitest/node:test) for cross-tenant/IDOR + header/cookie/secret assertions.
+- **Full black-box scan** — 9 categories (below), all from a URL.
+- **Framework-aware**: fingerprints the stack (Next.js/WordPress/Laravel/Django/Rails/Spring/ASP.NET) and
+  runs targeted checks for its known misconfigs — only when confidently detected.
+- **White-box helpers** (`idorProbe`, `rbacProbe`, `dataIsolationProbe`, `massAssignmentProbe`,
+  `classifyTenantAccess`, `findSensitiveFields`, `checkSecurityHeaders`, `checkCookieFlags`, `scanSecrets`):
+  import into your own test suite (jest/vitest/node:test) for RBAC, cross-tenant/IDOR, mass-assignment,
+  header/cookie/secret assertions. See `examples/security-suite/` + `examples/tenant-isolation/`.
 - **Templates**: `SECURITY.md`, `security.txt`, `CODEOWNERS`.
 - **Reusable GitHub Actions workflow**: `.github/workflows/probe.yml` (call it with `uses:`).
 
@@ -38,6 +42,13 @@ on error pages, and **GraphQL introspection** left enabled.
 **SPF** + **DMARC** (with policy strength — `p=none` is only monitoring), **CAA** (restricts who can
 issue TLS certs for you), and a **dangling-CNAME → subdomain-takeover** heuristic (a CNAME pointing at
 a target that no longer resolves). All from the hostname, via DNS lookups.
+
+### 🧩 `framework` — stack-specific misconfigs
+Fingerprints the platform from headers/cookies/HTML, then (only on a **confident** match) probes that
+stack's notorious surfaces: **Next.js** secrets serialized into `__NEXT_DATA__`; **WordPress** REST
+user-enumeration + `xmlrpc.php` + `wp-config.php.bak`; **Laravel** `/telescope` + `/_ignition` (RCE);
+**Django** `DEBUG=True` error pages; **Rails** `/rails/info` + `/sidekiq`; **Spring Boot**
+`/actuator/env` + `/heapdump`; **ASP.NET** `elmah.axd` + `trace.axd`. All safe GETs, body-validated.
 
 ### 🔗 `reliability` — is it actually working?
 Homepage status, **broken same-origin links & images** (sampled HEAD/GET), and **mixed content**
@@ -132,7 +143,7 @@ node .kit/dist/cli.js https://your-deploy.example.com --baseline probe-baseline.
 
 ## Use the CLI locally / ad-hoc
 ```bash
-# full scan (all 8 categories)
+# full scan (all 9 categories)
 npx github:newsengine/anal-probe https://app.example.com
 
 # scope it, gate harder, test CORS, machine-readable output
