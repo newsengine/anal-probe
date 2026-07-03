@@ -21,6 +21,7 @@ import { scanPort, parsePorts, identifyBanner } from '../dist/active.js';
 import { parseNvd } from '../dist/cve.js';
 import { refsFor, asvsCoverage, securityGrade, tlsGrade, cwesHit, apiTop10Hit } from '../dist/compliance.js';
 import { renderReport } from '../dist/report.js';
+import { renderHealthFindings } from '../dist/render-health.js';
 import net from 'node:net';
 
 function server(handler: http.RequestListener): Promise<{ url: string; close: () => void }> {
@@ -849,4 +850,44 @@ test('framework category: flags secrets serialized into Next.js __NEXT_DATA__', 
   const findings = await probe(srv.url, { only: ['framework'] });
   srv.close();
   assert.ok(findings.find((f) => f.id === 'framework.next.data-secrets' && !f.pass), 'flags a secret in __NEXT_DATA__');
+});
+
+test('render-health: flags a rendered error boundary (the Sparkle #119 class — 200, no pageerror)', () => {
+  // Short page whose whole content is the fallback → HIGH, this is the exact miss browse/crawl had.
+  const eb = renderHealthFindings('/forms/123', { visibleTextLen: 90, errorSignature: 'something went wrong', overlay: null, blankRoot: null, rootTextLen: 90 });
+  assert.equal(eb.length, 1);
+  assert.equal(eb[0].id, 'render.errorboundary/forms/123');
+  assert.equal(eb[0].severity, 'high');
+  assert.equal(eb[0].pass, false);
+  assert.equal(eb[0].category, 'reliability');
+});
+
+test('render-health: does NOT flag a long page that merely mentions the phrase', () => {
+  const ok = renderHealthFindings('/blog/post', { visibleTextLen: 4200, errorSignature: 'something went wrong', overlay: null, blankRoot: null, rootTextLen: 4200 });
+  assert.equal(ok.length, 1);
+  assert.equal(ok[0].pass, true, 'a 4200-char article that says "something went wrong" is not a crash');
+  assert.equal(ok[0].id, 'render.ok/blog/post');
+});
+
+test('render-health: flags a framework crash overlay and a blank app root', () => {
+  const ov = renderHealthFindings('/x', { visibleTextLen: 1200, errorSignature: null, overlay: 'nextjs-portal', blankRoot: null, rootTextLen: 1200 });
+  assert.equal(ov[0].id, 'render.overlay/x');
+  assert.equal(ov[0].severity, 'high');
+
+  const blank = renderHealthFindings('/dashboard', { visibleTextLen: 0, errorSignature: null, overlay: null, blankRoot: '#root', rootTextLen: 0 });
+  assert.equal(blank[0].id, 'render.blank/dashboard');
+  assert.equal(blank[0].severity, 'medium');
+});
+
+test('render-health: healthy page yields an info PASS (so the report records the check ran)', () => {
+  const ok = renderHealthFindings('/', { visibleTextLen: 2000, errorSignature: null, overlay: null, blankRoot: null, rootTextLen: 2000 });
+  assert.equal(ok[0].pass, true);
+  assert.equal(ok[0].severity, 'info');
+  assert.equal(ok[0].id, 'render.ok/');
+});
+
+test('render-health: category is overridable (e.g. security scans)', () => {
+  const s = renderHealthFindings('/p', { visibleTextLen: 50, errorSignature: 'unhandled runtime error', overlay: null, blankRoot: null, rootTextLen: 50 }, 'security');
+  assert.equal(s[0].category, 'security');
+  assert.equal(s[0].severity, 'high');
 });

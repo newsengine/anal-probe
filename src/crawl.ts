@@ -8,6 +8,7 @@
 // delete (POST) forms, never clicks destructive buttons, never mutates data. Needs playwright-core + Chrome.
 
 import type { Finding, Severity } from './types.js';
+import { RENDER_HEALTH_PROBE, renderHealthFindings } from './render-health.js';
 
 const MARK = 'apxPROBE7391';
 const XSS_IN = `"><${MARK}>`;
@@ -79,6 +80,12 @@ export async function crawlAudit(startUrl: string, opts: CrawlOptions = {}): Pro
       page.off('pageerror', onErr); page.off('console', onCon); page.off('response', onResp);
       continue;
     }
+
+    // Render health (error boundary / crash overlay / blank root) — caught even when no pageerror fires.
+    try {
+      const health = await page.evaluate(`(${RENDER_HEALTH_PROBE})()`);
+      for (const finding of renderHealthFindings(path, health)) if (!finding.pass) findings.push(finding);
+    } catch { /* best-effort */ }
 
     if (jsErr.length) findings.push(f(`crawl.js${path}`, `JavaScript error on ${path}`, 'high', jsErr.slice(0, 2).join(' | '), 'Fix the uncaught exception — it breaks interactivity.'));
     if (failed.length) findings.push(f(`crawl.req${path}`, `Failed request(s) on ${path}`, 'medium', [...new Set(failed)].slice(0, 4).join(', '), 'Fix resources/APIs returning 4xx/5xx on this page.'));
