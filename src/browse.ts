@@ -12,6 +12,7 @@
 
 import type { Finding, Severity } from './types.js';
 import { discoverPages, normalizeUrl } from './probe.js';
+import { RENDER_HEALTH_PROBE, renderHealthFindings } from './render-health.js';
 
 const f = (id: string, title: string, severity: Severity, pass: boolean, detail: string, fix?: string): Finding =>
   ({ category: 'reliability', id, title, severity, pass, detail, fix });
@@ -70,6 +71,13 @@ export async function browseChecks(startUrl: string, opts: { pages?: number; tim
       await page.close();
       continue;
     }
+
+    // Render health: error boundary / crash overlay / blank root — the failures a `pageerror` listener
+    // misses because an error boundary CATCHES the throw (page returns 200, no uncaught error fires).
+    try {
+      const health = await page.evaluate(`(${RENDER_HEALTH_PROBE})()`);
+      out.push(...renderHealthFindings(path, health));
+    } catch { /* probe is best-effort */ }
 
     // Uncaught JS errors — the page's interactivity is likely broken.
     out.push(f(`browse.jserrors${path}`, jsErrors.length ? `${jsErrors.length} JavaScript error(s) on ${path}` : `No JS errors on ${path}`, jsErrors.length ? 'high' : 'info', jsErrors.length === 0, jsErrors.length ? jsErrors.slice(0, 3).join(' | ') : 'clean', jsErrors.length ? 'Uncaught exceptions break interactivity — fix the errors thrown on load.' : undefined));

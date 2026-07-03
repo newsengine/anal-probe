@@ -6,6 +6,7 @@
 //
 // STRICTLY NON-DESTRUCTIVE: only GET navigation and search/filter inputs. It NEVER submits create/edit/
 // delete (POST) forms, never clicks destructive buttons, never mutates data. Needs playwright-core + Chrome.
+import { RENDER_HEALTH_PROBE, renderHealthFindings } from './render-health.js';
 const MARK = 'apxPROBE7391';
 const XSS_IN = `"><${MARK}>`;
 const SQLI_IN = `apx' OR '1'='1`;
@@ -97,6 +98,14 @@ export async function crawlAudit(startUrl, opts = {}) {
             page.off('response', onResp);
             continue;
         }
+        // Render health (error boundary / crash overlay / blank root) — caught even when no pageerror fires.
+        try {
+            const health = await page.evaluate(`(${RENDER_HEALTH_PROBE})()`);
+            for (const finding of renderHealthFindings(path, health))
+                if (!finding.pass)
+                    findings.push(finding);
+        }
+        catch { /* best-effort */ }
         if (jsErr.length)
             findings.push(f(`crawl.js${path}`, `JavaScript error on ${path}`, 'high', jsErr.slice(0, 2).join(' | '), 'Fix the uncaught exception — it breaks interactivity.'));
         if (failed.length)
