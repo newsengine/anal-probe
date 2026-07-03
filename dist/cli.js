@@ -289,6 +289,66 @@ async function runSeparation() {
     }
     process.exit(results.some((r) => r.verdict === 'leak') ? 1 : 0);
 }
+// "Extra batteries" deep browser crawl + SAFE audit (needs playwright-core + Chrome).
+async function runCrawl() {
+    const target = process.argv[3];
+    if (!target || target.startsWith('-')) {
+        console.error('usage: anal-probe crawl <url> [--profile "Profile 3"] [--cookie "<raw>"] [--pages 30] [--report f.html] [--pdf f.pdf]\n       (needs: npm i -D playwright-core; --profile reuses a logged-in Chrome profile. SAFE: GET-only, never submits create/edit/delete.)');
+        process.exit(2);
+        return;
+    }
+    const url = normalizeUrl(target);
+    const { crawlAudit } = await import('./crawl.js');
+    const pagesRaw = arg('--pages');
+    console.error('⚠️  Browser crawl — GET navigation + read-only search fuzz only; never submits mutating forms.');
+    const findings = await crawlAudit(url, {
+        maxPages: pagesRaw && Number(pagesRaw) > 0 ? Number(pagesRaw) : 30,
+        chromeProfile: arg('--profile'),
+        cookie: arg('--cookie'),
+    });
+    const pages = findings.pagesVisited || [];
+    const sum = summarize(findings);
+    const reportPath = arg('--report');
+    const pdfPath = arg('--pdf');
+    if (reportPath || pdfPath) {
+        const { renderReport } = await import('./report.js');
+        const html = renderReport(`${url} — browser crawl (${pages.length} pages)`, findings);
+        if (reportPath) {
+            writeFileSync(reportPath, html);
+            console.error(`📄 wrote ${reportPath}`);
+        }
+        if (pdfPath) {
+            try {
+                const { chromium } = await import('playwright-core');
+                const b = await chromium.launch({ channel: 'chrome', headless: true }).catch(() => chromium.launch({ headless: true }));
+                const p = await b.newPage();
+                await p.setContent(html, { waitUntil: 'load' });
+                await p.pdf({ path: pdfPath, format: 'A4', printBackground: true, margin: { top: '14mm', bottom: '14mm', left: '12mm', right: '12mm' } });
+                await b.close();
+                console.error(`📄 wrote ${pdfPath}`);
+            }
+            catch (e) {
+                console.error(`--pdf: ${String(e?.message || e)}`);
+            }
+        }
+    }
+    if (flag('--json')) {
+        console.log(JSON.stringify({ url, pagesVisited: pages, summary: sum, findings }, null, 2));
+    }
+    else {
+        console.log(`\n🕷️  anal-probe crawl — ${pages.length} page(s) of ${url}\n`);
+        for (const fn of findings.filter((x) => !x.pass)) {
+            console.log(`  ${SEV_ICON[fn.severity]} [${fn.category}] ${fn.title}`);
+            console.log(`        ${fn.detail}`);
+            if (fn.fix)
+                console.log(`        ↳ fix: ${fn.fix}`);
+        }
+        if (!findings.some((x) => !x.pass))
+            console.log('  no functional/fuzz issues found on the reachable pages.');
+        console.log(`\n  pages: ${pages.join(', ') || '(none reached — session may be stale)'}\n`);
+    }
+    process.exit(findings.some((fn) => !fn.pass && fn.severity === 'high') ? 1 : 0);
+}
 async function main() {
     if (process.argv[2] === 'audit')
         return runAudit();
@@ -300,6 +360,8 @@ async function main() {
         return runCve();
     if (process.argv[2] === 'separation')
         return runSeparation();
+    if (process.argv[2] === 'crawl')
+        return runCrawl();
     const cfgResult = loadConfig(arg('--config'));
     if (cfgResult.error) {
         console.error(cfgResult.error);

@@ -18,9 +18,11 @@ every failing finding comes with a one-line **fix**. Exits non-zero so it double
   runs targeted checks for its known misconfigs — only when confidently detected.
 - **Host intel** (passive): resolved IPs, reverse DNS, CDN/hosting provider — no scanning.
 - **Opt-in aggressive modes** (off by default): `recon` (authorization-gated, CDN-guarded port scan +
-  service/version ID + **CVE correlation** via NVD with `--cve` — identify-only, never exploit) and
-  `browse` (headless-browser functional check: JS errors, broken images, failed requests, forms accepting
-  input — needs `playwright-core`).
+  service/version ID + **CVE correlation** via NVD with `--cve` — identify-only, never exploit),
+  `browse` (headless-browser functional check), `crawl` (deep browser crawl of every reachable page —
+  JS errors, broken images, failed requests + **safe** reflected-input/SQL-error fuzz on search forms;
+  GET-only, never submits mutating forms), and `separation` (two-account cross-tenant isolation test).
+  All need `playwright-core`.
 - **CVE checks**: `audit` covers dependency CVEs (npm advisory DB); `recon --cve` / `anal-probe cve
   <product> <version>` correlate detected service versions against NVD.
 - **Standards mapping** (`--compliance`): reports coverage against **OWASP ASVS 4.0.3 Level 1**

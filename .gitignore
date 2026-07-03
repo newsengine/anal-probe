@@ -4,3 +4,4 @@ node_modules
 # tenant-isolation local config (contains tenant ids)
 examples/tenant-isolation/config.json
 examples/security-suite/config.json
+reports/
