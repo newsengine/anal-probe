@@ -23,7 +23,9 @@ function stdBadges(id: string): string {
   return parts.map((p) => `<span class="b">${esc(p)}</span>`).join(' ');
 }
 
-export function renderReport(url: string, findings: Finding[], opts: { generatedAt?: string } = {}): string {
+export interface ObservationGroup { heading: string; points: string[] }
+
+export function renderReport(url: string, findings: Finding[], opts: { generatedAt?: string; observations?: ObservationGroup[] } = {}): string {
   const when = opts.generatedAt ?? new Date().toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
   const failed = findings.filter((f) => !f.pass);
   const counts = { high: 0, medium: 0, low: 0 } as Record<string, number>;
@@ -97,6 +99,10 @@ export function renderReport(url: string, findings: Finding[], opts: { generated
   .asvs .no .mk{color:#99a} .asvs .no .tx{color:#8a94a0}
   .asvs .nc .mk{color:#bbc} .asvs .nc .tx{color:#9aa2ac}
   .asvs .fail .tx{color:var(--hi)}
+  .obs{margin-top:6px}
+  .obs h3{font-size:14.5px;margin:20px 0 8px;letter-spacing:-.01em}
+  .obs ul{margin:0 0 6px;padding-left:20px}
+  .obs li{font-size:13.5px;color:#233;margin:5px 0}
   footer{padding:20px 34px;color:var(--mut);font-size:12px;border-top:1px solid var(--line)}
   @media print{body{background:#fff}.page{border:none;margin:0;max-width:none}
     section,header,footer{padding-left:0;padding-right:0}.page{border-radius:0}
@@ -122,6 +128,10 @@ export function renderReport(url: string, findings: Finding[], opts: { generated
     <table><thead><tr><th class="sev">Result</th><th>Check &amp; detail</th><th>Suggested fix / mitigation</th><th>Standards</th></tr></thead>
     <tbody>${rows(c)}</tbody></table>`).join('')}
 </section>
+${opts.observations?.length ? `<section>
+  <h2>UX &amp; operational observations</h2>
+  <div class="obs">${opts.observations.map((g) => `<h3>${esc(g.heading)}</h3><ul>${g.points.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>`).join('')}</div>
+</section>` : ''}
 <section>
   <h2>OWASP ASVS 4.0.3 — Level 1 coverage (${asvsN('pass')} pass · ${asvsN('fail')} fail · ${asvsN('not-observed')} not-observed · ${asvsN('not-covered')} n/a)</h2>
   <div class="asvs">${asvs.map((r) => {
