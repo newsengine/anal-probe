@@ -1,0 +1,29 @@
+name: New check / feature
+description: Propose a new check or capability
+labels: [enhancement]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What should it detect / do?
+      description: Describe the check or feature and the real-world issue it catches.
+    validations:
+      required: true
+  - type: input
+    id: standard
+    attributes:
+      label: Standard mapping
+      description: Which OWASP Top 10 / ASVS / CWE / WSTG item does it map to?
+  - type: textarea
+    id: signature
+    attributes:
+      label: How would it validate (avoid false positives)?
+      description: What signal in the response confirms the issue, so a catch-all/CDN page won't trip it?
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Fits the project constraints
+      options:
+        - label: Can be done black-box (URL in → finding out), no source access
+        - label: Non-destructive by default (or gated behind an opt-in/authorization flag)
+        - label: No new runtime npm dependencies in core
