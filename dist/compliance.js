@@ -37,6 +37,8 @@ const STANDARDS = [
     ['jwt.alg-none', { asvs: ['V3.5.3'], owasp: 'A02', wstg: ['WSTG-SESS-10'], cwe: ['CWE-347'], apiTop10: 'API2:2023' }],
     ['jwt.', { asvs: ['V3.5.3'], owasp: 'A07', wstg: ['WSTG-SESS-10'], cwe: ['CWE-522', 'CWE-613'], apiTop10: 'API2:2023' }],
     ['host-header.', { owasp: 'A03', wstg: ['WSTG-INPV-17'], cwe: ['CWE-644', 'CWE-20'] }],
+    ['csrf', { asvs: ['V4.2.2'], owasp: 'A01', wstg: ['WSTG-SESS-05'], cwe: ['CWE-352'] }],
+    ['dom-xss', { asvs: ['V5.3.3'], owasp: 'A03', wstg: ['WSTG-CLNT-01'], cwe: ['CWE-79'] }],
     ['secret.', { asvs: ['V13.1.3'], owasp: 'A02', wstg: ['WSTG-CRYP-04'], cwe: ['CWE-798', 'CWE-312'] }],
     ['sourcemap.exposed', { asvs: ['V14.3.2'], owasp: 'A05', cwe: ['CWE-540'] }],
     ['debug-leak', { asvs: ['V14.3.2'], owasp: 'A05', wstg: ['WSTG-CONF-02'], cwe: ['CWE-200', 'CWE-489'] }],

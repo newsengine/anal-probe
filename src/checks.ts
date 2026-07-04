@@ -10,6 +10,8 @@ import {
 } from './core.js';
 import { jwtFindings } from './jwt.js';
 import { hostHeaderChecks } from './hostheader.js';
+import { csrfFindings } from './csrf.js';
+import { domXssFindings } from './domxss.js';
 
 const f = (
   category: Finding['category'],
@@ -268,6 +270,10 @@ export async function securityChecks(ctx: ScanContext): Promise<Finding[]> {
   out.push(...jwtFindings(ctx));
   // Host-header injection (password-reset / cache poisoning) — one extra request with a spoofed host.
   out.push(...await hostHeaderChecks(ctx));
+  // CSRF protection heuristic on state-changing HTML forms (conservative — SameSite/token aware).
+  out.push(...csrfFindings(ctx));
+  // DOM-XSS: user-controllable source flowing directly into an HTML/JS sink in inline scripts.
+  out.push(...domXssFindings(ctx));
 
   return out;
 }
