@@ -13,7 +13,7 @@ npx github:newsengine/anal-probe https://your-app.example.com
 Built for vibe coders shipping with AI: you don't need to know what to look for — the scanner does, and
 every failing finding comes with a one-line **fix**. Exits non-zero so it doubles as a CI gate.
 
-- **Full black-box scan** — 10 categories (below), all from a URL.
+- **Full black-box scan** — 11 categories (below), all from a URL.
 - **Framework-aware**: fingerprints the stack (Next.js/WordPress/Laravel/Django/Rails/Spring/ASP.NET) and
   runs targeted checks for its known misconfigs — only when confidently detected.
 - **Host intel** (passive): resolved IPs, reverse DNS, CDN/hosting provider — no scanning.
@@ -62,6 +62,18 @@ stack's notorious surfaces: **Next.js** secrets serialized into `__NEXT_DATA__`;
 user-enumeration + `xmlrpc.php` + `wp-config.php.bak`; **Laravel** `/telescope` + `/_ignition` (RCE);
 **Django** `DEBUG=True` error pages; **Rails** `/rails/info` + `/sidekiq`; **Spring Boot**
 `/actuator/env` + `/heapdump`; **ASP.NET** `elmah.axd` + `trace.axd`. All safe GETs, body-validated.
+
+### 📦 `components` — vulnerable & outdated client-side libraries (OWASP A06)
+A retire.js-style pass over the JavaScript the browser actually loads. Fingerprints library + version from
+script/link URLs (cdnjs/jsdelivr/unpkg/local filenames) and inline banners — **no code execution** — then
+matches a curated table of known-vulnerable ranges: **jQuery** <3.5 (CVE-2020-11022 XSS), **jQuery UI**,
+**Bootstrap** <4.3.1 (CVE-2019-8331), **Lodash** <4.17.21 (RCE/proto-pollution), **AngularJS** (EOL),
+**Handlebars**, **Moment**, **axios**, **DOMPurify**, **Vue 2** (EOL), and more. Detects current versions
+too (no false positives). Server-side stack CVEs are covered separately by the `cve` mode.
+
+Also in `security`: **JWT hygiene** — any token exposed to the browser is decoded (not verified) and flagged
+for `alg:none`, missing `exp`, over-long lifetime, or sitting in a non-HttpOnly cookie. And a **host-header
+injection** probe (spoofed `X-Forwarded-Host` reflected into URLs → password-reset / cache poisoning).
 
 ### 🔗 `reliability` — is it actually working?
 Homepage status, **broken same-origin links & images** (sampled HEAD/GET), and **mixed content**
@@ -163,7 +175,7 @@ node .kit/dist/cli.js https://your-deploy.example.com --baseline probe-baseline.
 
 ## Use the CLI locally / ad-hoc
 ```bash
-# full scan (all 10 categories)
+# full scan (all 11 categories)
 npx github:newsengine/anal-probe https://app.example.com
 
 # scope it, gate harder, test CORS, machine-readable output

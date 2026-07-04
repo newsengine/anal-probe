@@ -1,6 +1,6 @@
 export type Severity = 'high' | 'medium' | 'low' | 'info';
 /** Buckets a vibe coder actually cares about: "is it broken / leaking / unfindable / slow?". */
-export type Category = 'security' | 'secrets' | 'exposure' | 'dns' | 'reliability' | 'seo' | 'a11y' | 'performance' | 'agent' | 'framework' | 'host';
+export type Category = 'security' | 'secrets' | 'exposure' | 'dns' | 'reliability' | 'seo' | 'a11y' | 'performance' | 'agent' | 'framework' | 'components' | 'host';
 export interface Finding {
     id: string;
     category: Category;
