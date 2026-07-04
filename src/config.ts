@@ -15,6 +15,7 @@ export interface FileConfig {
   crawl?: number;
   allowReportOnlyCsp?: boolean;
   quiet?: boolean;
+  pluginsDir?: string;
 }
 
 /**
