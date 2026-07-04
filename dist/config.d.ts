@@ -9,6 +9,7 @@ export interface FileConfig {
     crawl?: number;
     allowReportOnlyCsp?: boolean;
     quiet?: boolean;
+    pluginsDir?: string;
 }
 /**
  * Load config from an explicit path or the default `.analproberc.json` in cwd. A missing DEFAULT file is

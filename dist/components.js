@@ -5,6 +5,8 @@
 // actually loads. This detects library + version from script/link URLs and inline banners (no code execution),
 // then matches a curated table of known-vulnerable version ranges. Black-box, zero-dependency.
 import { html as H, resolveUrl } from './core.js';
+import { VULN_DATA } from './vuln-data.js';
+export { VULN_DATA_META } from './vuln-data.js';
 const f = (id, title, severity, pass, detail, fix) => ({ category: 'components', id, title, severity, pass, detail, fix });
 // --- semver-lite: compare dotted numeric versions, tolerating pre-release/junk suffixes. ---
 export function parseVersion(v) {
@@ -35,29 +37,7 @@ const DETECTORS = [
     { key: 'vue', url: /(?:libs\/vue\/|vue@|vue[.-])(\d+\.\d+\.\d+)/i, banner: /Vue\.js v(\d+\.\d+\.\d+)/i },
     { key: 'select2', url: /(?:libs\/select2\/|select2@|select2[.-])(\d+\.\d+\.\d+)/i, banner: /Select2 (\d+\.\d+\.\d+)/i },
 ];
-export const VULN_DB = {
-    jquery: [
-        { below: '3.5.0', severity: 'medium', ref: 'CVE-2020-11022/11023', note: 'XSS via jQuery.htmlPrefilter when passing untrusted HTML to DOM-manipulation methods' },
-        { below: '1.9.0', severity: 'medium', ref: 'CVE-2012-6708', note: 'selector-based XSS in very old jQuery' },
-    ],
-    'jquery-ui': [{ below: '1.13.2', severity: 'medium', ref: 'CVE-2022-31160', note: 'XSS in the checkboxradio widget when refreshing with untrusted labels' }],
-    angular: [{ below: '1.8.3', severity: 'high', ref: 'AngularJS EOL + multiple XSS/sandbox-escape CVEs', note: 'AngularJS 1.x is end-of-life (no security fixes); multiple known XSS/CSP-bypass issues' }],
-    bootstrap: [
-        { below: '3.4.1', severity: 'medium', ref: 'CVE-2019-8331', note: 'XSS in data-template / tooltip/popover (Bootstrap 3.x)' },
-        { below: '4.3.1', severity: 'medium', ref: 'CVE-2019-8331', note: 'XSS in data-template (Bootstrap 4.x < 4.3.1)' },
-    ],
-    lodash: [{ below: '4.17.21', severity: 'high', ref: 'CVE-2021-23337 / CVE-2020-8203', note: 'command injection via _.template and prototype pollution' }],
-    underscore: [{ below: '1.13.0', severity: 'high', ref: 'CVE-2021-23358', note: 'arbitrary code execution via the template function' }],
-    moment: [{ below: '2.29.4', severity: 'medium', ref: 'CVE-2022-31129', note: 'ReDoS parsing very long date strings (also: Moment is in maintenance mode)' }],
-    handlebars: [{ below: '4.7.7', severity: 'high', ref: 'CVE-2021-23369 / CVE-2021-23383', note: 'prototype-pollution → RCE in the template compiler' }],
-    axios: [
-        { below: '0.21.1', severity: 'medium', ref: 'CVE-2020-28168', note: 'SSRF via redirect handling' },
-        { below: '1.6.0', severity: 'medium', ref: 'CVE-2023-45857', note: 'leaks the XSRF-TOKEN to third-party hosts on cross-origin requests' },
-    ],
-    dompurify: [{ below: '3.0.9', severity: 'medium', ref: 'multiple mXSS bypasses (e.g. CVE-2024-45801)', note: 'mutation-XSS sanitizer bypasses — upgrade to the latest 3.x' }],
-    vue: [{ below: '3.0.0', severity: 'low', ref: 'Vue 2 EOL (Dec 2023)', note: 'Vue 2.x is end-of-life; no further security patches' }],
-    select2: [{ below: '4.0.6', severity: 'medium', ref: 'GHSA select2 XSS', note: 'XSS via unescaped option rendering' }],
-};
+export const VULN_DB = VULN_DATA;
 // Pull {name, version} pairs from the page's script/link URLs and inline library banners. Pure + testable.
 export function detectComponents(htmlText, baseUrl) {
     const urls = [
