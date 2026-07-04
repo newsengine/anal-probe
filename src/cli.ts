@@ -10,6 +10,7 @@
 //   --rate-limit-path /api/health   burst-test this path for rate limiting (expects 429)
 //   --allow-report-only-csp         accept CSP Report-Only as a pass
 //   --max-crawl 25                  how many links/scripts to fetch-check
+//   --plugins <dir>                 dir of custom JSON plugin templates (default ./anal-probe-plugins)
 //   --fail-on high|medium|any       CI exit threshold (default high)
 //   --json                          machine-readable output
 //   --sarif                         emit SARIF 2.1.0 (for GitHub code scanning / upload-sarif)
@@ -50,6 +51,7 @@ const CAT_TITLE: Record<Category, string> = {
   framework: '🧩 Framework-specific',
   components: '📦 Vulnerable components',
   host: '🖥️  Host & infrastructure',
+  plugins: '🔌 Custom plugins',
 };
 
 async function runAudit() {
@@ -349,6 +351,7 @@ async function main() {
     allowReportOnlyCsp: flag('--allow-report-only-csp') || !!config.allowReportOnlyCsp,
     maxCrawl: arg('--max-crawl') ? num('--max-crawl', 25) : config.maxCrawl,
     timeoutMs: arg('--timeout') ? num('--timeout', 10_000) : config.timeoutMs,
+    pluginsDir: arg('--plugins') ?? config.pluginsDir,
     extraHeaders: hasAuth ? extraHeaders : undefined,
   };
   const failOn = (arg('--fail-on') ?? config.failOn ?? 'high') as 'high' | 'medium' | 'any';

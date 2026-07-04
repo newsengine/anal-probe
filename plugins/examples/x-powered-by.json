@@ -1,0 +1,13 @@
+{
+  "id": "x-powered-by",
+  "title": "X-Powered-By header discloses the server stack",
+  "severity": "low",
+  "request": { "path": "/", "method": "HEAD" },
+  "matchers-condition": "and",
+  "matchers": [
+    { "type": "header", "name": "x-powered-by", "regex": ".+" }
+  ],
+  "fix": "Remove the X-Powered-By header (e.g. app.disable('x-powered-by') in Express) so you don't advertise the framework/version.",
+  "owasp": "A05",
+  "cwe": ["CWE-200"]
+}
