@@ -1,5 +1,5 @@
 // run.mjs — config-driven access-control suite. Generalized from an app-specific Playwright suite into
-// checks that run against ANY deployed app given a URL + a few auth tokens. NO backend/test-server/OVH,
+// checks that run against ANY deployed app given a URL + a few auth tokens. NO backend/test server,
 // NO browser — plain fetch. Covers: auth enforcement + RBAC, owner-scoped data isolation, mass
 // assignment / privilege escalation, and sensitive-field leakage.
 //

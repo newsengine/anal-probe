@@ -10,6 +10,17 @@ npx github:newsengine/anal-probe https://your-app.example.com
 
 📄 **Landing page:** [`docs/index.html`](docs/index.html) (self-contained; serve via GitHub Pages from `/docs`).
 
+> ### ⚖️ Authorized use only
+> anal-probe is for testing systems **you own or have explicit written permission to test**. The default
+> scan is read-only, but it can be run in active modes (port scanning, fuzzing). **Scanning systems you
+> don't own may be illegal** (e.g. the US Computer Fraud and Abuse Act, the UK Computer Misuse Act, and
+> equivalents elsewhere). You are solely responsible for having authorization for every target. Active
+> recon is additionally gated behind an explicit `recon --yes-i-am-authorized` flag.
+>
+> This software is provided **"AS IS", without warranty of any kind** (see [`LICENSE`](LICENSE)). It is a
+> hygiene scanner and a **first line of defense — not a substitute for a professional penetration test or
+> security audit**. A clean scan does not mean an application is secure.
+
 Built for vibe coders shipping with AI: you don't need to know what to look for — the scanner does, and
 every failing finding comes with a one-line **fix**. Exits non-zero so it doubles as a CI gate.
 

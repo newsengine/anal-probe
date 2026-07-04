@@ -4,7 +4,7 @@
 // resources. Black-box, no framework — drives the shipped `idorProbe` helper. Safe & non-destructive
 // by default (GETs only); it just asserts the server DENIES the attacker.
 //
-// HOW TO USE (agentaus.com.au or any app):
+// HOW TO USE (against any app you own / are authorized to test):
 //   1. Log in as ACCOUNT A in a browser, open DevTools → Application → Cookies, copy the session cookie
 //      (NextAuth: `__Secure-next-auth.session-token` or `next-auth.session-token`, or `authjs.session-token`).
 //   2. While logged in as A, open DevTools → Network, click around, and copy 2–3 request URLs that return
@@ -18,7 +18,7 @@
 
 import { idorProbe } from '../dist/testkit.js';
 
-const ORIGIN = process.env.ORIGIN || 'https://agentaus.com.au';
+const ORIGIN = process.env.ORIGIN || 'https://your-app.example.com';
 
 // Account A owns the resources; account B is the "attacker" who must be denied.
 const A_COOKIE = process.env.A_COOKIE || 'PASTE_ACCOUNT_A_SESSION_COOKIE_HERE';
@@ -26,7 +26,7 @@ const B_COOKIE = process.env.B_COOKIE || 'PASTE_ACCOUNT_B_SESSION_COOKIE_HERE';
 
 // The attacker (account B). idorProbe sends these headers with every request below.
 const attacker = {
-  label: 'account B (mikenicholls88@gmail.com)',
+  label: 'account B (attacker@example.com)',
   headers: { cookie: B_COOKIE, accept: 'application/json' },
 };
 

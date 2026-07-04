@@ -6,7 +6,7 @@ import { promises as dns } from 'node:dns';
 const f = (id, title, severity, pass, detail, fix) => ({ category: 'dns', id, title, severity, pass, detail, fix });
 // Common multi-label public suffixes. Not the full Public Suffix List (that would need a bundled data
 // file / network fetch, breaking the zero-dep promise) but it covers the suffixes real users actually
-// deploy under — crucially the AU set, so `agentaus.com.au` resolves to the right apex instead of `com.au`.
+// deploy under — crucially the AU set, so an AU domain like `example.com.au` resolves to its registrable apex, not `com.au`.
 const MULTI_LABEL_SUFFIXES = new Set([
     'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au', 'asn.au', 'id.au',
     'co.uk', 'org.uk', 'me.uk', 'ac.uk', 'gov.uk',

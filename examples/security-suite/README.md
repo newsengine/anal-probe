@@ -2,7 +2,7 @@
 
 Config-driven security checks generalized from an app-specific Playwright suite (originally ~1,900
 db-nextjs-fresh tests) into checks that run against **any deployed app** — a URL plus a few auth tokens.
-No backend, no test-server/OVH, no browser: plain `fetch` over the shipped `anal-probe` testkit.
+No backend, no test server, no browser: plain `fetch` over the shipped `anal-probe` testkit.
 
 ## What it checks
 

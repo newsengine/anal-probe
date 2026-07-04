@@ -316,10 +316,10 @@ test('idorProbe reports a cross-tenant leak', async () => {
 
 // ═══════════════════════ audit fixes (2026-07-02) ═══════════════════════════
 
-// [DNS apex] multi-label public suffixes — the .com.au bug found live on agentaus.com.au.
+// [DNS apex] multi-label public suffixes — a .com.au multi-label public-suffix case.
 test('apexOf handles multi-label public suffixes (.com.au / .co.uk / .co.nz)', () => {
-  assert.equal(apexOf('agentaus.com.au'), 'agentaus.com.au', 'AU domain apex is the registrable name, not com.au');
-  assert.equal(apexOf('www.agentaus.com.au'), 'agentaus.com.au');
+  assert.equal(apexOf('example.com.au'), 'example.com.au', 'AU domain apex is the registrable name, not com.au');
+  assert.equal(apexOf('www.example.com.au'), 'example.com.au');
   assert.equal(apexOf('shop.example.co.uk'), 'example.co.uk');
   assert.equal(apexOf('foo.bar.example.co.nz'), 'example.co.nz');
   assert.equal(apexOf('plain.example.com'), 'example.com', 'ordinary TLDs still use last two labels');
