@@ -24,9 +24,14 @@ npx github:newsengine/anal-probe https://your-app.example.com
 Built for vibe coders shipping with AI: you don't need to know what to look for — the scanner does, and
 every failing finding comes with a one-line **fix**. Exits non-zero so it doubles as a CI gate.
 
-- **Full black-box scan** — 11 categories (below), all from a URL.
+- **Full black-box scan** — 13 categories (below), all from a URL.
 - **Framework-aware**: fingerprints the stack (Next.js/WordPress/Laravel/Django/Rails/Spring/ASP.NET) and
   runs targeted checks for its known misconfigs — only when confidently detected.
+- **Vulnerable-component detection** (OWASP A06): retire.js-style client-side JS library CVE matching,
+  backed by an **auto-updating vuln feed** — `npm run update-vuln-db` refreshes the table from the
+  retire.js community feed (currently 12 libraries / 200+ ranges), so it doesn't go stale.
+- **Custom plugins**: drop **JSON** check templates in a directory and run `--plugins <dir>` — add your
+  own checks (status/header/body matchers, and/or conditions) with **zero code**. See [`plugins/`](plugins/).
 - **Host intel** (passive): resolved IPs, reverse DNS, CDN/hosting provider — no scanning.
 - **Opt-in aggressive modes** (off by default): `recon` (authorization-gated, CDN-guarded port scan +
   service/version ID + **CVE correlation** via NVD with `--cve` — identify-only, never exploit),
@@ -83,8 +88,20 @@ matches a curated table of known-vulnerable ranges: **jQuery** <3.5 (CVE-2020-11
 too (no false positives). Server-side stack CVEs are covered separately by the `cve` mode.
 
 Also in `security`: **JWT hygiene** — any token exposed to the browser is decoded (not verified) and flagged
-for `alg:none`, missing `exp`, over-long lifetime, or sitting in a non-HttpOnly cookie. And a **host-header
-injection** probe (spoofed `X-Forwarded-Host` reflected into URLs → password-reset / cache poisoning).
+for `alg:none`, missing `exp`, over-long lifetime, or sitting in a non-HttpOnly cookie. A **host-header
+injection** probe (spoofed `X-Forwarded-Host` reflected into URLs → password-reset / cache poisoning). A
+**CSRF-protection heuristic** (state-changing POST forms with no token, SameSite-aware). And a high-confidence
+**DOM-XSS** check (a URL/`referrer`/`window.name` source flowing straight into an `innerHTML`/`document.write`/
+`eval` sink in inline script).
+
+### 🔌 `plugins` — your own checks, no code
+Point `--plugins <dir>` at a folder of **JSON** templates and anal-probe runs them as first-class findings —
+no fork, no TypeScript. A template is a `request` (GET/HEAD only) plus `matchers` (`status` / `header` /
+`body-regex` / `body-contains`, combined with `matchers-condition: and|or`, any matcher invertible with
+`negative: true`) and output metadata (`id`/`title`/`severity`/`fix`/`owasp`/`cwe`). Malformed templates are
+skipped (not fatal); GET/HEAD-only and a template cap keep it safe. Schema + annotated examples in
+[`plugins/`](plugins/). The known-vulnerable-library table (`components`) is itself refreshable via
+`npm run update-vuln-db` (pulls the retire.js community feed) so it never goes stale.
 
 ### 🔗 `reliability` — is it actually working?
 Homepage status, **broken same-origin links & images** (sampled HEAD/GET), and **mixed content**
@@ -189,7 +206,7 @@ node .kit/dist/cli.js https://your-deploy.example.com --baseline probe-baseline.
 
 ## Use the CLI locally / ad-hoc
 ```bash
-# full scan (all 11 categories)
+# full scan (all 13 categories)
 npx github:newsengine/anal-probe https://app.example.com
 
 # scope it, gate harder, test CORS, machine-readable output

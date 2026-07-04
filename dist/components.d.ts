@@ -1,4 +1,5 @@
 import type { Finding, ScanContext, Severity } from './types.js';
+export { VULN_DATA_META } from './vuln-data.js';
 export declare function parseVersion(v: string): number[];
 export declare function versionLt(a: string, b: string): boolean;
 interface Vuln {
@@ -16,4 +17,3 @@ export interface DetectedComponent {
 export declare function detectComponents(htmlText: string, baseUrl: string): DetectedComponent[];
 export declare function matchVulnerabilities(c: DetectedComponent): Vuln | null;
 export declare function componentChecks(ctx: ScanContext): Promise<Finding[]>;
-export {};

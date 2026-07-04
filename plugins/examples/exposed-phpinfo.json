@@ -1,0 +1,14 @@
+{
+  "id": "exposed-phpinfo",
+  "title": "phpinfo() page is publicly reachable",
+  "severity": "high",
+  "request": { "path": "/phpinfo.php", "method": "GET" },
+  "matchers-condition": "and",
+  "matchers": [
+    { "type": "status", "status": 200 },
+    { "type": "body-contains", "contains": "phpinfo()" }
+  ],
+  "fix": "Delete phpinfo.php (and any diagnostic pages) from the production docroot — it leaks environment, paths and loaded modules.",
+  "owasp": "A05",
+  "cwe": ["CWE-200"]
+}

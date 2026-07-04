@@ -17,7 +17,8 @@ export type Category =
   | 'agent'        // agent-readiness: llms.txt, AI-crawler policy, SSR content, structured data
   | 'framework'    // stack-specific misconfigs (Next.js/WordPress/Laravel/Django/Rails/Spring/ASP.NET)
   | 'components'   // OWASP A06: vulnerable/outdated client-side JS libraries (retire.js-style)
-  | 'host';        // passive infra intel: resolved IP(s), reverse DNS, CDN/hosting provider (no scanning)
+  | 'host'         // passive infra intel: resolved IP(s), reverse DNS, CDN/hosting provider (no scanning)
+  | 'plugins';     // user-supplied JSON templates (Nuclei-style declarative checks) run by src/plugins.ts
 
 export interface Finding {
   id: string;
@@ -47,6 +48,8 @@ export interface ScanOptions {
   maxCrawl?: number;
   /** Per-request network timeout in ms (default 10000). Guards against sites that never respond. */
   timeoutMs?: number;
+  /** Directory of user JSON plugin templates for the `plugins` category (default ./anal-probe-plugins). */
+  pluginsDir?: string;
   /** Extra headers (e.g. Cookie / Authorization) sent ONLY on same-origin requests, so the scan can
    *  reach pages behind login. Never attached to the attack-probe requests (CORS/open-redirect) or any
    *  cross-origin fetch, to avoid leaking your session to a third party. */

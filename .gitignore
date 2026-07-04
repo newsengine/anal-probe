@@ -5,3 +5,6 @@ node_modules
 examples/tenant-isolation/config.json
 examples/security-suite/config.json
 reports/
+
+# agent worktrees (isolation)
+.claude/worktrees/

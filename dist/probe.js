@@ -9,6 +9,7 @@ import { frameworkChecks } from './framework.js';
 import { componentChecks } from './components.js';
 import { detectStacks } from './detect.js';
 import { hostChecks } from './host.js';
+import { pluginChecks } from './plugins.js';
 const RUNNERS = {
     security: securityChecks,
     secrets: secretChecks,
@@ -22,6 +23,7 @@ const RUNNERS = {
     framework: frameworkChecks,
     components: componentChecks,
     host: hostChecks,
+    plugins: pluginChecks,
 };
 export const ALL_CATEGORIES = Object.keys(RUNNERS);
 /** Add https:// when the user typed a bare domain, so `anal-probe example.com` just works. */

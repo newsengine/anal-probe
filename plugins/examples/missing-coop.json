@@ -1,0 +1,14 @@
+{
+  "id": "missing-coop",
+  "title": "Cross-Origin-Opener-Policy header is missing",
+  "severity": "low",
+  "request": { "path": "/", "method": "GET" },
+  "matchers-condition": "and",
+  "matchers": [
+    { "type": "status", "status": [200, 204] },
+    { "type": "header", "name": "cross-origin-opener-policy", "negative": true }
+  ],
+  "fix": "Send Cross-Origin-Opener-Policy: same-origin so a malicious opener can't reference your window (cross-origin isolation).",
+  "owasp": "A05",
+  "cwe": ["CWE-1021"]
+}
