@@ -10,6 +10,7 @@ import {
 import { dnsChecks } from './dns.js';
 import { agentChecks } from './agent.js';
 import { frameworkChecks } from './framework.js';
+import { componentChecks } from './components.js';
 import { detectStacks } from './detect.js';
 import { hostChecks } from './host.js';
 
@@ -28,6 +29,7 @@ const RUNNERS: Record<Category, (ctx: ScanContext) => Promise<Finding[]>> = {
   performance: performanceChecks,
   agent: agentChecks,
   framework: frameworkChecks,
+  components: componentChecks,
   host: hostChecks,
 };
 

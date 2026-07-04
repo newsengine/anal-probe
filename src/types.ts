@@ -16,6 +16,7 @@ export type Category =
   | 'performance'  // compression, caching, page weight
   | 'agent'        // agent-readiness: llms.txt, AI-crawler policy, SSR content, structured data
   | 'framework'    // stack-specific misconfigs (Next.js/WordPress/Laravel/Django/Rails/Spring/ASP.NET)
+  | 'components'   // OWASP A06: vulnerable/outdated client-side JS libraries (retire.js-style)
   | 'host';        // passive infra intel: resolved IP(s), reverse DNS, CDN/hosting provider (no scanning)
 
 export interface Finding {

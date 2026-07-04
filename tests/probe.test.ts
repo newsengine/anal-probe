@@ -22,7 +22,16 @@ import { parseNvd } from '../dist/cve.js';
 import { refsFor, asvsCoverage, securityGrade, tlsGrade, cwesHit, apiTop10Hit } from '../dist/compliance.js';
 import { renderReport } from '../dist/report.js';
 import { renderHealthFindings } from '../dist/render-health.js';
+import { detectComponents, matchVulnerabilities, versionLt, componentChecks } from '../dist/components.js';
+import { analyzeJwt, jwtFindings, b64urlDecode } from '../dist/jwt.js';
+import { hostHeaderChecks } from '../dist/hostheader.js';
 import net from 'node:net';
+
+// Build a JWT (header.payload.sig) from objects — base64url, no real signature (black-box test).
+function makeJwt(header: object, payload: object, sig = 'sig'): string {
+  const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  return `${b64(header)}.${b64(payload)}.${sig}`;
+}
 
 function server(handler: http.RequestListener): Promise<{ url: string; close: () => void }> {
   return new Promise((resolve) => {
@@ -890,4 +899,113 @@ test('render-health: category is overridable (e.g. security scans)', () => {
   const s = renderHealthFindings('/p', { visibleTextLen: 50, errorSignature: 'unhandled runtime error', overlay: null, blankRoot: null, rootTextLen: 50 }, 'security');
   assert.equal(s[0].category, 'security');
   assert.equal(s[0].severity, 'high');
+});
+
+// ---- OWASP A06: vulnerable client-side components (retire.js-style) ----
+test('components: versionLt compares dotted versions', () => {
+  assert.equal(versionLt('3.4.1', '3.5.0'), true);
+  assert.equal(versionLt('3.5.0', '3.5.0'), false);
+  assert.equal(versionLt('4.17.21', '4.17.21'), false);
+  assert.equal(versionLt('1.9.0', '1.13.0'), true);
+});
+
+test('components: detects a library + version from a CDN URL and flags the known CVE', () => {
+  const html = `<html><head><script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script></head></html>`;
+  const detected = detectComponents(html, 'https://example.com/');
+  const jq = detected.find((d) => d.name === 'jquery');
+  assert.ok(jq, 'detected jquery');
+  assert.equal(jq.version, '3.4.1');
+  const v = matchVulnerabilities(jq);
+  assert.ok(v && /CVE-2020-11022/.test(v.ref), 'matched the jQuery XSS CVE');
+  assert.equal(v.severity, 'medium');
+});
+
+test('components: a current library is detected but NOT flagged', () => {
+  const html = `<script src="/vendor/jquery-3.7.1.min.js"></script>`;
+  const jq = detectComponents(html, 'https://example.com/').find((d) => d.name === 'jquery');
+  assert.ok(jq && jq.version === '3.7.1');
+  assert.equal(matchVulnerabilities(jq), null, 'jquery 3.7.1 is not vulnerable');
+});
+
+test('components: detects lodash from npm-CDN @version + flags high-sev RCE range', () => {
+  const html = `<script src="https://cdn.jsdelivr.net/npm/lodash@4.17.11/lodash.min.js"></script>`;
+  const c = detectComponents(html, 'https://x.com/').find((d) => d.name === 'lodash');
+  assert.ok(c && c.version === '4.17.11');
+  const v = matchVulnerabilities(c);
+  assert.equal(v && v.severity, 'high');
+});
+
+test('components: componentChecks emits a HIGH failing finding for the whole scan', async () => {
+  const html = `<script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.11/lodash.min.js"></script>`;
+  const findings = await componentChecks({ html, baseUrl: 'https://x.com/', origin: 'https://x.com', url: new URL('https://x.com/'), res: null, headers: new Headers(), opts: {} } as any);
+  const bad = findings.find((f) => f.id === 'components.lodash' && !f.pass);
+  assert.ok(bad, 'flags vulnerable lodash');
+  assert.equal(bad.category, 'components');
+  assert.equal(bad.severity, 'high');
+});
+
+test('components: no libraries → a single info pass, never a false positive', async () => {
+  const findings = await componentChecks({ html: '<html><body>hi</body></html>', baseUrl: 'https://x.com/', origin: 'https://x.com', url: new URL('https://x.com/'), res: null, headers: new Headers(), opts: {} } as any);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].id, 'components.none');
+  assert.equal(findings[0].pass, true);
+});
+
+// ---- JWT hygiene ----
+test('jwt: b64urlDecode round-trips and analyzeJwt reads the header alg', () => {
+  const t = makeJwt({ alg: 'HS256', typ: 'JWT' }, { sub: 'u1', exp: 9999999999, iat: 9999900000 });
+  const a = analyzeJwt(t);
+  assert.equal(a.valid, true);
+  assert.equal(a.alg, 'HS256');
+  assert.equal(a.hasExp, true);
+});
+
+test('jwt: alg:none is flagged HIGH', () => {
+  const t = makeJwt({ alg: 'none', typ: 'JWT' }, { sub: 'admin' }, '');
+  const findings = jwtFindings({ html: `token=${t}`, headers: new Headers(), origin: 'https://x.com' } as any);
+  const none = findings.find((f) => f.id === 'jwt.alg-none');
+  assert.ok(none && !none.pass && none.severity === 'high');
+});
+
+test('jwt: missing exp is flagged MEDIUM; sensitive claims are surfaced', () => {
+  const t = makeJwt({ alg: 'HS256' }, { sub: 'u1', email: 'a@b.com', role: 'admin' });
+  const findings = jwtFindings({ html: t, headers: new Headers(), origin: 'https://x.com' } as any);
+  assert.ok(findings.find((f) => f.id === 'jwt.no-exp' && f.severity === 'medium'));
+  assert.ok(findings.find((f) => f.id === 'jwt.sensitive-claims'));
+});
+
+test('jwt: JWT in a non-HttpOnly cookie is flagged; clean token → no noise', () => {
+  const t = makeJwt({ alg: 'RS256' }, { sub: 'u1', exp: 2000000000, iat: 1999999000 });
+  const h = new Headers(); h.append('set-cookie', `session=${t}; Path=/; Secure`); // no HttpOnly
+  const findings = jwtFindings({ html: '', headers: h, origin: 'https://x.com' } as any);
+  assert.ok(findings.find((f) => f.id === 'jwt.cookie-not-httponly' && f.severity === 'medium'));
+});
+
+test('jwt: no JWT present → stays silent (no findings)', () => {
+  assert.equal(jwtFindings({ html: '<html>nothing here</html>', headers: new Headers(), origin: 'https://x.com' } as any).length, 0);
+});
+
+// ---- Host-header injection ----
+test('host-header: flags reflection of a spoofed X-Forwarded-Host', async () => {
+  const srv = await server((req, res) => {
+    const xfh = req.headers['x-forwarded-host'] || 'localhost';
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end(`<html><head><link rel="canonical" href="https://${xfh}/home"></head><body>hi</body></html>`);
+  });
+  const findings = await hostHeaderChecks({ origin: srv.url, opts: {} } as any);
+  srv.close();
+  const hit = findings.find((f) => f.id === 'host-header.injection');
+  assert.ok(hit && !hit.pass, 'reflected host is flagged');
+  assert.equal(hit.severity, 'medium');
+});
+
+test('host-header: a well-behaved app (fixed canonical host) passes', async () => {
+  const srv = await server((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end(`<html><head><link rel="canonical" href="https://fixed.example/home"></head><body>hi</body></html>`);
+  });
+  const findings = await hostHeaderChecks({ origin: srv.url, opts: {} } as any);
+  srv.close();
+  const hit = findings.find((f) => f.id === 'host-header.injection');
+  assert.ok(hit && hit.pass, 'no reflection → pass');
 });

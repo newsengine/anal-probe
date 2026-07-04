@@ -3,6 +3,8 @@
 // grouped by Category. All are black-box: a URL is the only input, so the same kit works against any
 // vibe-coded app — Vite, Next, Astro, Rails, whatever — without touching the source.
 import { safeFetch, fetchText, resolveUrl, sameOrigin, html as H, scanSecrets, tlsProbe, gradeTlsProtocol, gradeTlsCipher, } from './core.js';
+import { jwtFindings } from './jwt.js';
+import { hostHeaderChecks } from './hostheader.js';
 const f = (category, id, title, severity, pass, detail, fix) => ({ category, id, title, severity, pass, detail, fix });
 // Parse a CSP header into a directive→sources map (lowercased directive names).
 function parseCsp(policy) {
@@ -230,6 +232,10 @@ export async function securityChecks(ctx) {
         const got429 = burst.some((r) => r && r.status === 429);
         out.push(f('security', 'rate-limit', got429 ? 'Rate limiting active' : 'No rate limiting observed', 'medium', got429, got429 ? '25-request burst was throttled (429)' : `25 rapid requests to ${ctx.opts.rateLimitPath} were not throttled`, got429 ? undefined : 'Add rate limiting on auth/public endpoints so they can\'t be brute-forced or hammered.'));
     }
+    // JWT hygiene on any token exposed to the browser (alg:none / no-exp / long-lived / non-HttpOnly cookie).
+    out.push(...jwtFindings(ctx));
+    // Host-header injection (password-reset / cache poisoning) — one extra request with a spoofed host.
+    out.push(...await hostHeaderChecks(ctx));
     return out;
 }
 // ───────────────────────────── secrets (keys leaked to the browser) ──────────────────────────────

@@ -6,6 +6,7 @@ import { securityChecks, secretChecks, exposureChecks, reliabilityChecks, seoChe
 import { dnsChecks } from './dns.js';
 import { agentChecks } from './agent.js';
 import { frameworkChecks } from './framework.js';
+import { componentChecks } from './components.js';
 import { detectStacks } from './detect.js';
 import { hostChecks } from './host.js';
 const RUNNERS = {
@@ -19,6 +20,7 @@ const RUNNERS = {
     performance: performanceChecks,
     agent: agentChecks,
     framework: frameworkChecks,
+    components: componentChecks,
     host: hostChecks,
 };
 export const ALL_CATEGORIES = Object.keys(RUNNERS);

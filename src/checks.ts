@@ -8,6 +8,8 @@ import {
   safeFetch, fetchText, headerGet, resolveUrl, sameOrigin, html as H, scanSecrets,
   tlsProbe, gradeTlsProtocol, gradeTlsCipher,
 } from './core.js';
+import { jwtFindings } from './jwt.js';
+import { hostHeaderChecks } from './hostheader.js';
 
 const f = (
   category: Finding['category'],
@@ -261,6 +263,11 @@ export async function securityChecks(ctx: ScanContext): Promise<Finding[]> {
     const got429 = burst.some((r) => r && r.status === 429);
     out.push(f('security', 'rate-limit', got429 ? 'Rate limiting active' : 'No rate limiting observed', 'medium', got429, got429 ? '25-request burst was throttled (429)' : `25 rapid requests to ${ctx.opts.rateLimitPath} were not throttled`, got429 ? undefined : 'Add rate limiting on auth/public endpoints so they can\'t be brute-forced or hammered.'));
   }
+
+  // JWT hygiene on any token exposed to the browser (alg:none / no-exp / long-lived / non-HttpOnly cookie).
+  out.push(...jwtFindings(ctx));
+  // Host-header injection (password-reset / cache poisoning) — one extra request with a spoofed host.
+  out.push(...await hostHeaderChecks(ctx));
 
   return out;
 }

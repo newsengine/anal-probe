@@ -48,6 +48,7 @@ const CAT_TITLE = {
     dns: '🌐 DNS & email', reliability: '🔗 Reliability', seo: '🔎 SEO', a11y: '♿ Accessibility', performance: '⚡ Performance',
     agent: '🤖 Agent readiness',
     framework: '🧩 Framework-specific',
+    components: '📦 Vulnerable components',
     host: '🖥️  Host & infrastructure',
 };
 async function runAudit() {
