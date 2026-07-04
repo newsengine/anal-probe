@@ -98,7 +98,10 @@ HTTPS + HTTP→HTTPS redirect, **HSTS**, **`nosniff`**, **`Referrer-Policy`**, *
 **`security.txt`** (RFC 9116), **dangerous CORS reflection** (with `--cors-path`: fails only on
 reflect-arbitrary-origin **+** `Allow-Credentials: true` — a bare `*` without credentials is fine),
 **TLS cert expiry**, **open redirect** (common `?next=`/`?redirect=` params), **Subresource Integrity**
-on cross-origin `<script>`/`<link>`, and **rate limiting** (opt-in via `--rate-limit-path`).
+on cross-origin `<script>`/`<link>`, **rate limiting** (opt-in via `--rate-limit-path`), a **CSRF-protection
+heuristic** (state-changing POST forms with no anti-CSRF token, SameSite-aware so it won't false-positive),
+and a high-confidence **DOM-XSS** check (a URL/`referrer`/`window.name` source flowing straight into an
+`innerHTML`/`document.write`/`eval` sink in inline script).
 
 ### 🔎 `seo` — will Google show it right?
 `<title>`, meta description, Open Graph, canonical, exactly one `<h1>`, `robots.txt`, `sitemap.xml`.

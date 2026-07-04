@@ -25,6 +25,8 @@ import { renderHealthFindings } from '../dist/render-health.js';
 import { detectComponents, matchVulnerabilities, versionLt, componentChecks } from '../dist/components.js';
 import { analyzeJwt, jwtFindings, b64urlDecode } from '../dist/jwt.js';
 import { hostHeaderChecks } from '../dist/hostheader.js';
+import { csrfFindings } from '../dist/csrf.js';
+import { domXssFindings, scanDomXssSinks } from '../dist/domxss.js';
 import net from 'node:net';
 
 // Build a JWT (header.payload.sig) from objects — base64url, no real signature (black-box test).
@@ -1008,4 +1010,56 @@ test('host-header: a well-behaved app (fixed canonical host) passes', async () =
   srv.close();
   const hit = findings.find((f) => f.id === 'host-header.injection');
   assert.ok(hit && hit.pass, 'no reflection → pass');
+});
+
+// ---- CSRF protection heuristic ----
+test('csrf: POST form with no token + no SameSite → MEDIUM', () => {
+  const h = new Headers(); h.append('set-cookie', 'sessionid=abc; Path=/; HttpOnly');
+  const ctx = { html: `<form method="post" action="/transfer"><input name="amount"></form>`, headers: h } as any;
+  const hit = csrfFindings(ctx).find((f) => f.id === 'csrf');
+  assert.ok(hit && !hit.pass && hit.severity === 'medium', 'unprotected POST form flagged medium');
+});
+
+test('csrf: a CSRF token field clears it (pass)', () => {
+  const ctx = { html: `<form method="post"><input type="hidden" name="_csrf" value="x"><input name="q"></form>`, headers: new Headers() } as any;
+  const hit = csrfFindings(ctx).find((f) => f.id === 'csrf');
+  assert.ok(hit && hit.pass, 'token present → pass');
+});
+
+test('csrf: SameSite=Strict cookie downgrades a token-less form to LOW', () => {
+  const h = new Headers(); h.append('set-cookie', 'session=abc; Path=/; HttpOnly; SameSite=Strict');
+  const ctx = { html: `<form method="post"><input name="q"></form>`, headers: h } as any;
+  const hit = csrfFindings(ctx).find((f) => f.id === 'csrf');
+  assert.ok(hit && !hit.pass && hit.severity === 'low', 'SameSite mitigates → low');
+});
+
+test('csrf: no POST forms (SPA) → not applicable, no finding', () => {
+  const ctx = { html: `<form><input name="q"></form><div id="app"></div>`, headers: new Headers() } as any;
+  assert.equal(csrfFindings(ctx).length, 0);
+});
+
+// ---- DOM-XSS sink heuristic ----
+test('dom-xss: direct location→innerHTML flow is flagged', () => {
+  const hits = scanDomXssSinks(`function r(){ document.getElementById('o').innerHTML = location.hash.slice(1); }`);
+  assert.ok(hits.some((h) => /innerHTML/.test(h.sink)), 'innerHTML ← location.hash detected');
+});
+
+test('dom-xss: document.write(location) and eval(location) flagged', () => {
+  assert.ok(scanDomXssSinks(`document.write(location.search)`).length, 'document.write');
+  assert.ok(scanDomXssSinks(`eval(location.hash)`).length, 'eval');
+});
+
+test('dom-xss: a lone innerHTML with no source is NOT flagged (low false positive)', () => {
+  assert.equal(scanDomXssSinks(`el.innerHTML = "<b>static</b>"; render(data);`).length, 0);
+});
+
+test('dom-xss: domXssFindings scans only inline scripts and emits a MEDIUM finding', () => {
+  const ctx = { html: `<script>document.body.innerHTML = document.referrer;</script>` } as any;
+  const hit = domXssFindings(ctx).find((f) => f.id === 'dom-xss');
+  assert.ok(hit && !hit.pass && hit.severity === 'medium');
+});
+
+test('dom-xss: clean inline script → no findings', () => {
+  const ctx = { html: `<script>console.log('hi'); const x = 1;</script>` } as any;
+  assert.equal(domXssFindings(ctx).length, 0);
 });

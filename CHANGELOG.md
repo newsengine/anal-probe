@@ -15,6 +15,10 @@ All notable changes to this project are documented here. The format is based on
   `alg:none`, missing `exp`, over-long lifetime, and non-HttpOnly-cookie storage.
 - **Host-header injection** probe (in `security`): flags a spoofed `X-Forwarded-Host` reflected into
   redirects/URLs (password-reset-link / web-cache poisoning).
+- **CSRF-protection heuristic** (in `security`): state-changing POST forms lacking an anti-CSRF token,
+  SameSite-cookie-aware so it only flags genuinely-unprotected forms (CWE-352 / A01).
+- **DOM-XSS** heuristic (in `security`): a URL/`referrer`/`window.name` source flowing directly into an
+  `innerHTML`/`document.write`/`eval`/`insertAdjacentHTML` sink in inline script (CWE-79 / A03).
 - **Render-health** checks (`browse`/`crawl`): detects rendered error boundaries, framework crash
   overlays, and blank app roots — client-side failures that return HTTP 200 with no console error.
 - Open-source release scaffolding: `LICENSE` (Apache-2.0), `SECURITY.md`, `CONTRIBUTING.md`,
