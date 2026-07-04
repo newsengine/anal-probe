@@ -7,6 +7,8 @@
 
 import type { Finding, ScanContext, Severity } from './types.js';
 import { html as H, resolveUrl } from './core.js';
+import { VULN_DATA } from './vuln-data.js';
+export { VULN_DATA_META } from './vuln-data.js';
 
 const f = (id: string, title: string, severity: Severity, pass: boolean, detail: string, fix?: string): Finding =>
   ({ category: 'components', id, title, severity, pass, detail, fix });
@@ -39,31 +41,11 @@ const DETECTORS: Detector[] = [
   { key: 'select2', url: /(?:libs\/select2\/|select2@|select2[.-])(\d+\.\d+\.\d+)/i, banner: /Select2 (\d+\.\d+\.\d+)/i },
 ];
 
-// Curated known-vulnerable ranges (fixedIn = first SAFE version). Sourced from well-known advisories/CVEs.
+// Curated known-vulnerable ranges (fixedIn = first SAFE version). The table lives in the AUTO-GENERATED
+// ./vuln-data.ts module (refreshed from the retire.js community feed via `npm run update-vuln-db`); it is
+// re-exported here as VULN_DB for backward-compat with existing imports.
 interface Vuln { below: string; severity: Severity; ref: string; note: string }
-export const VULN_DB: Record<string, Vuln[]> = {
-  jquery: [
-    { below: '3.5.0', severity: 'medium', ref: 'CVE-2020-11022/11023', note: 'XSS via jQuery.htmlPrefilter when passing untrusted HTML to DOM-manipulation methods' },
-    { below: '1.9.0', severity: 'medium', ref: 'CVE-2012-6708', note: 'selector-based XSS in very old jQuery' },
-  ],
-  'jquery-ui': [{ below: '1.13.2', severity: 'medium', ref: 'CVE-2022-31160', note: 'XSS in the checkboxradio widget when refreshing with untrusted labels' }],
-  angular: [{ below: '1.8.3', severity: 'high', ref: 'AngularJS EOL + multiple XSS/sandbox-escape CVEs', note: 'AngularJS 1.x is end-of-life (no security fixes); multiple known XSS/CSP-bypass issues' }],
-  bootstrap: [
-    { below: '3.4.1', severity: 'medium', ref: 'CVE-2019-8331', note: 'XSS in data-template / tooltip/popover (Bootstrap 3.x)' },
-    { below: '4.3.1', severity: 'medium', ref: 'CVE-2019-8331', note: 'XSS in data-template (Bootstrap 4.x < 4.3.1)' },
-  ],
-  lodash: [{ below: '4.17.21', severity: 'high', ref: 'CVE-2021-23337 / CVE-2020-8203', note: 'command injection via _.template and prototype pollution' }],
-  underscore: [{ below: '1.13.0', severity: 'high', ref: 'CVE-2021-23358', note: 'arbitrary code execution via the template function' }],
-  moment: [{ below: '2.29.4', severity: 'medium', ref: 'CVE-2022-31129', note: 'ReDoS parsing very long date strings (also: Moment is in maintenance mode)' }],
-  handlebars: [{ below: '4.7.7', severity: 'high', ref: 'CVE-2021-23369 / CVE-2021-23383', note: 'prototype-pollution → RCE in the template compiler' }],
-  axios: [
-    { below: '0.21.1', severity: 'medium', ref: 'CVE-2020-28168', note: 'SSRF via redirect handling' },
-    { below: '1.6.0', severity: 'medium', ref: 'CVE-2023-45857', note: 'leaks the XSRF-TOKEN to third-party hosts on cross-origin requests' },
-  ],
-  dompurify: [{ below: '3.0.9', severity: 'medium', ref: 'multiple mXSS bypasses (e.g. CVE-2024-45801)', note: 'mutation-XSS sanitizer bypasses — upgrade to the latest 3.x' }],
-  vue: [{ below: '3.0.0', severity: 'low', ref: 'Vue 2 EOL (Dec 2023)', note: 'Vue 2.x is end-of-life; no further security patches' }],
-  select2: [{ below: '4.0.6', severity: 'medium', ref: 'GHSA select2 XSS', note: 'XSS via unescaped option rendering' }],
-};
+export const VULN_DB: Record<string, Vuln[]> = VULN_DATA;
 
 export interface DetectedComponent { name: string; version: string; evidence: string }
 
