@@ -53,7 +53,7 @@
   },
   "homepage": "https://github.com/newsengine/anal-probe#readme",
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
+    "@eslint/js": "^9.39.5",
     "@types/node": "^20.0.0",
     "eslint": "^9.39.5",
     "globals": "^17.7.0",
