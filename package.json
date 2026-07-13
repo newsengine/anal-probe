@@ -17,6 +17,8 @@
     "build": "tsc -p tsconfig.json",
     "probe": "node --experimental-strip-types src/cli.ts",
     "update-vuln-db": "node scripts/update-vuln-db.mjs",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "test": "npm run build && node --experimental-strip-types --test tests/*.test.ts",
     "prepublishOnly": "npm run build",
     "prepare": "npm run build"
@@ -51,8 +53,12 @@
   },
   "homepage": "https://github.com/newsengine/anal-probe#readme",
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^20.0.0",
+    "eslint": "^9.39.5",
+    "globals": "^17.7.0",
     "playwright-core": "^1.61.1",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.63.0"
   }
 }

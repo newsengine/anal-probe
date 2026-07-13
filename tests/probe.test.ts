@@ -23,7 +23,7 @@ import { refsFor, asvsCoverage, securityGrade, tlsGrade, cwesHit, apiTop10Hit } 
 import { renderReport } from '../dist/report.js';
 import { renderHealthFindings } from '../dist/render-health.js';
 import { detectComponents, matchVulnerabilities, versionLt, componentChecks } from '../dist/components.js';
-import { analyzeJwt, jwtFindings, b64urlDecode } from '../dist/jwt.js';
+import { analyzeJwt, jwtFindings } from '../dist/jwt.js';
 import { hostHeaderChecks } from '../dist/hostheader.js';
 import { csrfFindings } from '../dist/csrf.js';
 import { domXssFindings, scanDomXssSinks } from '../dist/domxss.js';
