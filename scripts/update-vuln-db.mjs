@@ -7,7 +7,7 @@
 //
 // Usage: npm run update-vuln-db   (or: node scripts/update-vuln-db.mjs)
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 

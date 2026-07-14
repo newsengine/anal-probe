@@ -1,0 +1,20 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # The test/probe scripts use `node --experimental-strip-types`, which needs Node >= 22.6.
+          # (The published dist targets ES2022 and still runs on the engines floor of Node 20.)
+          node-version: '22'
+      # `npm test` runs the build, the node --test suite, and the ESLint check
+      # (tests/lint.test.ts), so lint regressions fail CI like any other test.
+      - run: npm ci || npm install
+      - run: npm test

@@ -63,7 +63,7 @@ export function identifyBanner(banner) {
     m = banner.match(/Server:\s*([A-Za-z][\w.-]+)/i); // Server: cloudflare
     if (m)
         return { product: m[1] };
-    m = banner.match(/\b(vsftpd|ProFTPD|Pure-FTPd|FileZilla|Postfix|Exim|Sendmail|OpenSSH|nginx|Apache|Microsoft-IIS|lighttpd|Jetty|Tomcat|Werkzeug|gunicorn|Kestrel)\b[\/ ]?v?([\d][\w.]*)?/i);
+    m = banner.match(/\b(vsftpd|ProFTPD|Pure-FTPd|FileZilla|Postfix|Exim|Sendmail|OpenSSH|nginx|Apache|Microsoft-IIS|lighttpd|Jetty|Tomcat|Werkzeug|gunicorn|Kestrel)\b[/ ]?v?([\d][\w.]*)?/i);
     if (m)
         return { product: m[1], version: m[2] || undefined };
     m = banner.match(/\b(\d+\.\d+\.\d+[\w.-]*)\b/); // bare version fallback

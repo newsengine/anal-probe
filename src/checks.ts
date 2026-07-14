@@ -5,7 +5,7 @@
 
 import type { Finding, ScanContext, Severity } from './types.js';
 import {
-  safeFetch, fetchText, headerGet, resolveUrl, sameOrigin, html as H, scanSecrets,
+  safeFetch, fetchText, resolveUrl, sameOrigin, html as H, scanSecrets,
   tlsProbe, gradeTlsProtocol, gradeTlsCipher,
 } from './core.js';
 import { jwtFindings } from './jwt.js';
@@ -98,7 +98,7 @@ export async function securityChecks(ctx: ScanContext): Promise<Finding[]> {
   const h = ctx.headers;
 
   for (const req of REQUIRED_HEADERS) {
-    let val = h.get(req.name);
+    const val = h.get(req.name);
     if (req.name === 'content-security-policy' && !val) {
       const ro = h.get('content-security-policy-report-only');
       if (ro && ctx.opts.allowReportOnlyCsp) {
@@ -416,7 +416,7 @@ export async function exposureChecks(ctx: ScanContext): Promise<Finding[]> {
   // Safe GETs; body-validated so an SPA/HTML fallback or a normal JSON response doesn't false-positive.
   // Require a real JSON key→value (or a full key/hash), so docs that merely mention "password_hash" or a
   // schema field name don't false-positive; only actual leaked VALUES trigger it.
-  const SECRET_IN_BODY = /"(?:service_role|SUPABASE_SERVICE_ROLE_KEY|CRON_SECRET|STRIPE_SECRET(?:_KEY)?|password_hash|encrypted_password|access_token|refresh_token|client_secret)"\s*:\s*"?[^"\s,}]{6,}|\$2[aby]\$[.\/A-Za-z0-9]{20,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\brole"\s*:\s*"service_role"/i;
+  const SECRET_IN_BODY = /"(?:service_role|SUPABASE_SERVICE_ROLE_KEY|CRON_SECRET|STRIPE_SECRET(?:_KEY)?|password_hash|encrypted_password|access_token|refresh_token|client_secret)"\s*:\s*"?[^"\s,}]{6,}|\$2[aby]\$[./A-Za-z0-9]{20,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\brole"\s*:\s*"service_role"/i;
   for (const dbg of ['/api/auth/debug', '/api/debug', '/api/_debug', '/api/auth/check', '/api/config', '/api/env']) {
     const res = await safeFetch(ctx.origin + dbg, { redirect: 'follow', headers: ctx.opts.extraHeaders });
     if (!res || !res.ok) continue;
