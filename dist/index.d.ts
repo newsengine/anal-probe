@@ -5,6 +5,7 @@ export { scanSecrets, SECRET_RULES, type SecretRule, type SecretHit, } from './c
 export { idorProbe, checkSecurityHeaders, checkCookieFlags, setTenantParam, classifyTenantAccess, rbacProbe, dataIsolationProbe, massAssignmentProbe, findSensitiveFields, type IdorCase, type IdorResult, type TenantAuth, type TenantProbeResponse, type TenantVerdict, type HttpActor, type AuthzResult, } from './testkit.js';
 export { runNpmAudit, failsAtLevel, type AuditResult, } from './audit.js';
 export { lintCsp, type CspIssue } from './checks.js';
+export { scanJsonLdBreakout, jsonLdFindings, type JsonLdIssue } from './jsonld.js';
 export { dnsChecks, gatherDns, evaluateDnsHygiene, apexOf, type DnsRecords, } from './dns.js';
 export { toSarif, type SarifOptions } from './sarif.js';
 export { detectStacks, type StackName, type StackSignal, type DetectInput } from './detect.js';
@@ -14,3 +15,6 @@ export { lookupCves, parseNvd, type CveHit } from './cve.js';
 export { refsFor, asvsCoverage, owaspTop10Hit, apiTop10Hit, cwesHit, securityGrade, tlsGrade, ASVS_L1, OWASP_TOP10_NAMES, OWASP_API_TOP10_NAMES, type StandardRefs, type AsvsReq, type AsvsResult, type AsvsStatus, } from './compliance.js';
 export { agentChecks, evaluateAgentReadiness, visibleText, aiCrawlersBlocked, AI_CRAWLERS, type AgentReadinessInput, } from './agent.js';
 export { findingKey, buildBaseline, applyBaseline, type Baseline, type BaselineDiff, } from './baseline.js';
+export { renderAgentReport, renderFindingPrompt, type AgentReportOptions, } from './agent-report.js';
+export { renderGherkinFeature, renderGherkinFiles, renderGherkinStepStub, type GherkinOptions, } from './gherkin.js';
+export { initRepo, type InitOptions, type InitResult, } from './init.js';
