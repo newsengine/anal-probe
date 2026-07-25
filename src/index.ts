@@ -22,6 +22,7 @@ export {
   runNpmAudit, failsAtLevel, type AuditResult,
 } from './audit.js';
 export { lintCsp, type CspIssue } from './checks.js';
+export { scanJsonLdBreakout, jsonLdFindings, type JsonLdIssue } from './jsonld.js';
 export {
   dnsChecks, gatherDns, evaluateDnsHygiene, apexOf,
   type DnsRecords,
@@ -44,3 +45,15 @@ export {
   findingKey, buildBaseline, applyBaseline,
   type Baseline, type BaselineDiff,
 } from './baseline.js';
+export {
+  renderAgentReport, renderFindingPrompt,
+  type AgentReportOptions,
+} from './agent-report.js';
+export {
+  renderGherkinFeature, renderGherkinFiles, renderGherkinStepStub,
+  type GherkinOptions,
+} from './gherkin.js';
+export {
+  initRepo,
+  type InitOptions, type InitResult,
+} from './init.js';
