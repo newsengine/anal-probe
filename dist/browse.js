@@ -1,11 +1,11 @@
 // src/browse.ts
-// OPT-IN browser-functional mode: the one part of anal-probe that drives a real (headless) browser, so
+// OPT-IN browser-functional mode: the one part of vibetesting-agent that drives a real (headless) browser, so
 // it can catch aberrant behaviour a fetch-based scan can't — JavaScript errors, broken images that only
 // fail after render, failed subresource loads, and forms that don't accept input. Kept OUT of the core
 // zero-install scan: it needs `playwright-core` (an OPTIONAL dependency) and uses your installed Chrome.
 //
 //   npm i -D playwright-core
-//   anal-probe browse <url> [--pages N] [--timeout ms] [--json] [--quiet]
+//   vibetesting-agent browse <url> [--pages N] [--timeout ms] [--json] [--quiet]
 //
 // It's read-only: it navigates and types a throwaway string into inputs to confirm they accept input; it
 // never submits forms or performs destructive actions.
@@ -32,7 +32,7 @@ export async function browseChecks(startUrl, opts = {}) {
         ({ chromium } = await import('playwright-core'));
     }
     catch {
-        return [f('browse.missing-dep', 'browser mode needs playwright-core', 'info', true, 'run `npm i -D playwright-core` to enable `anal-probe browse` (uses your installed Chrome)')];
+        return [f('browse.missing-dep', 'browser mode needs playwright-core', 'info', true, 'run `npm i -D playwright-core` to enable `vibetesting-agent browse` (uses your installed Chrome)')];
     }
     const out = [];
     const timeoutMs = opts.timeoutMs ?? 20000;
@@ -101,8 +101,8 @@ export async function browseChecks(startUrl, opts = {}) {
             let accepted = false;
             try {
                 const first = page.locator('input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=checkbox]):not([type=radio]):not([type=file]):not([disabled]):not([readonly]), textarea').first();
-                await first.fill('anal-probe-test', { timeout: 3000 });
-                accepted = (await first.inputValue()) === 'anal-probe-test';
+                await first.fill('vibetesting-agent-test', { timeout: 3000 });
+                accepted = (await first.inputValue()) === 'vibetesting-agent-test';
             }
             catch {
                 accepted = false;

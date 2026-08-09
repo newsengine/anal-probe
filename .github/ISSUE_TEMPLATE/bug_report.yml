@@ -6,12 +6,12 @@ body:
     attributes:
       value: |
         Thanks for the report. **Do not paste secrets** (API keys, tokens, cookies) — redact them.
-        If this is a security issue **in anal-probe itself**, use the private advisory flow in SECURITY.md instead.
+        If this is a security issue **in vibetesting-agent itself**, use the private advisory flow in SECURITY.md instead.
   - type: input
     id: version
     attributes:
-      label: anal-probe version
-      description: Output of `anal-probe --version` (or the git SHA).
+      label: vibetesting-agent version
+      description: Output of `vibetesting-agent --version` (or the git SHA).
     validations:
       required: true
   - type: dropdown
@@ -30,7 +30,7 @@ body:
     id: command
     attributes:
       label: Command you ran
-      description: e.g. `npx github:newsengine/anal-probe https://example.com --only security`
+      description: e.g. `npx github:newsengine/vibetesting-agent https://example.com --only security`
       render: shell
     validations:
       required: true

@@ -1,6 +1,6 @@
 // src/audit.ts
 // White-box dependency audit: wraps `npm audit --json` in the current repo and summarizes by severity.
-// Used as `anal-probe audit [--prod] [--level low|moderate|high|critical]` to gate CI on vuln deps.
+// Used as `vibetesting-agent audit [--prod] [--level low|moderate|high|critical]` to gate CI on vuln deps.
 import { execFile } from 'node:child_process';
 export function runNpmAudit(cwd = process.cwd(), prodOnly = false) {
     return new Promise((resolve) => {

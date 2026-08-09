@@ -66,8 +66,8 @@ export function toSarif(findings: Finding[], opts: SarifOptions = {}): unknown {
       {
         tool: {
           driver: {
-            name: 'anal-probe',
-            informationUri: 'https://github.com/newsengine/anal-probe',
+            name: 'vibetesting-agent',
+            informationUri: 'https://github.com/newsengine/vibetesting-agent',
             version: opts.version || '0.0.0',
             rules: [...rules.values()],
           },

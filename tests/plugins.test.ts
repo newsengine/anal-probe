@@ -145,7 +145,7 @@ test('pluginChecks runs templates from a dir: one matches, one does not', async 
       res.writeHead(404); res.end('not found');
     }
   });
-  const dir = mkdtempSync(path.join(tmpdir(), 'anal-probe-plugins-'));
+  const dir = mkdtempSync(path.join(tmpdir(), 'vibetesting-agent-plugins-'));
   // Matches: root returns X-Powered-By.
   writeFileSync(path.join(dir, 'hit.json'), JSON.stringify({
     id: 'xpb', title: 'X-Powered-By present', severity: 'low',
@@ -180,7 +180,7 @@ test('pluginChecks runs templates from a dir: one matches, one does not', async 
 });
 
 test('pluginChecks emits plugins.none when the directory is absent', async () => {
-  const ctx: any = { origin: 'http://127.0.0.1:1', url: new URL('http://127.0.0.1:1'), opts: { pluginsDir: '/no/such/dir/anal-probe' } };
+  const ctx: any = { origin: 'http://127.0.0.1:1', url: new URL('http://127.0.0.1:1'), opts: { pluginsDir: '/no/such/dir/vibetesting-agent' } };
   const findings = await pluginChecks(ctx);
   assert.equal(findings.length, 1);
   assert.equal(findings[0].id, 'plugins.none');

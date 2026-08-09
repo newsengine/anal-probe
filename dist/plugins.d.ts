@@ -55,7 +55,7 @@ export declare function evaluateMatcher(m: Matcher, res: ResponseView): boolean;
 export declare function evaluateTemplate(template: PluginTemplate, res: ResponseView): boolean;
 /**
  * `plugins` category runner. Loads user JSON templates from `ctx.opts.pluginsDir` (default
- * ./anal-probe-plugins), runs each as one GET/HEAD, and emits a failing Finding per matched template.
+ * ./vibetesting-agent-plugins), runs each as one GET/HEAD, and emits a failing Finding per matched template.
  * A malformed template can never break the run: bad files are skipped with an info finding. Emits a
  * `plugins.loaded` info-pass summarizing how many ran, or `plugins.none` when the dir is absent/empty.
  */

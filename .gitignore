@@ -8,3 +8,10 @@ reports/
 
 # agent worktrees (isolation)
 .claude/worktrees/
+.DS_Store
+
+# local secrets
+.dev.vars
+**/.dev.vars
+**/.env
+**/.env.*

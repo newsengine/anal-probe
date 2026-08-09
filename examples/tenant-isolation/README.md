@@ -12,13 +12,13 @@ each endpoint with the shipped `classifyTenantAccess` logic (unit-tested in the 
 **Strictly read-only:** only `GET`s are observed and rewritten. It never issues a write and never mutates
 another tenant.
 
-## Now built in: `anal-probe separation`
+## Now built in: `vibetesting-agent separation`
 
 This recipe is now a first-class **optional mode** (extra batteries — needs `playwright-core` + Chrome):
 
 ```bash
 npm i -D playwright-core
-anal-probe separation config.json     # config = { origin, tenantParam, chromeProfilesDir, appPaths,
+vibetesting-agent separation config.json     # config = { origin, tenantParam, chromeProfilesDir, appPaths,
                                        #            owner{label,chromeProfile,tenant}, attacker{...}, endpoints[{name,match}] }
 ```
 

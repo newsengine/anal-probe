@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "vibetesting-agent": {
+      "description": "Start scans, poll findings, and fetch Claude/Codex fix prompts for owned projects on VibeTesting Agent.",
+      "url": "https://vibetestingagent.com",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "tsx", "mcp/src/index.ts"],
+      "env": {
+        "VTA_API_URL": "https://vibetestingagent.com",
+        "VTA_API_KEY": "sk_live_YOUR_KEY"
+      },
+      "homepage": "https://vibetestingagent.com/dashboard/mcp",
+      "docs": "https://vibetestingagent.com/docs"
+    }
+  }
+}

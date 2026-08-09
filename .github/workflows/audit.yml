@@ -1,8 +1,8 @@
-# Reusable dependency audit — checks out the CALLER's repo, installs deps, runs `anal-probe audit`.
+# Reusable dependency audit — checks out the CALLER's repo, installs deps, runs `vibetesting-agent audit`.
 #
 #   jobs:
 #     deps:
-#       uses: newsengine/anal-probe/.github/workflows/audit.yml@main
+#       uses: newsengine/vibetesting-agent/.github/workflows/audit.yml@main
 #       with:
 #         level: high          # low | moderate | high | critical (default high)
 #         prod_only: false     # audit only production deps
@@ -25,9 +25,9 @@ jobs:
         with:
           node-version: ${{ inputs.node_version }}
       - run: npm ci || npm install
-      - name: anal-probe audit
+      - name: vibetesting-agent audit
         shell: bash
         run: |
           ARGS=(audit --level "${{ inputs.level }}")
           if [ "${{ inputs.prod_only }}" = "true" ]; then ARGS+=(--prod); fi
-          npx --yes github:newsengine/anal-probe "${ARGS[@]}"
+          npx --yes github:newsengine/vibetesting-agent "${ARGS[@]}"

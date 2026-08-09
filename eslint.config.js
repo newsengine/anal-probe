@@ -1,4 +1,4 @@
-// Flat ESLint config for anal-probe.
+// Flat ESLint config for vibetesting-agent.
 // Lints the TypeScript source, the test suite, and the .mjs scripts. Kept intentionally
 // pragmatic: this is a black-box scanner that handles untyped remote responses and injects
 // stringified probes into pages, so a few escape hatches (explicit `any`, console output) are
@@ -18,6 +18,10 @@ export default tseslint.config(
             'examples/**',
             'shipcheck/**',
             'plugins/examples/**',
+            // Hosted product is its own package; build output must never fail the OSS lint gate
+            'vibetesting-agent/**',
+            '.open-next/**',
+            '**/mcp/node_modules/**',
         ],
     },
     js.configs.recommended,

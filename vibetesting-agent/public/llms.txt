@@ -1,0 +1,18 @@
+# VibeTesting Agent
+
+> Black-box security scanning for vibe-coded apps. Free lite scan on the homepage; paid plans for continuous full scans after ownership verification.
+
+## Product
+- Homepage lite scan: https://vibetestingagent.com/#lite
+- Pricing: https://vibetestingagent.com/pricing
+- Docs: https://vibetestingagent.com/docs
+- Dashboard: https://vibetestingagent.com/dashboard
+- Login: https://vibetestingagent.com/login
+
+## Open source
+- Scanner (vibetesting-agent): https://github.com/newsengine/vibetesting-agent
+- Hosted agent: https://github.com/mikenicholls-msv/vibetesting-agent
+
+## Contact
+- Support: mike@dynamicbusiness.com.au
+- Security: see /.well-known/security.txt

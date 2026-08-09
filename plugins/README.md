@@ -1,25 +1,25 @@
-# anal-probe plugins (JSON templates)
+# vibetesting-agent plugins (JSON templates)
 
 Add your own black-box checks **without touching core code**. Drop `.json` template files in a
-directory and anal-probe's `plugins` category runs them Nuclei-style — but the format is plain **JSON**
+directory and vibetesting-agent's `plugins` category runs them Nuclei-style — but the format is plain **JSON**
 (parsed with the built-in `JSON.parse`; there is **no YAML and no runtime dependency** — zero-dep is an
 absolute rule).
 
 ## How it runs
 
 ```sh
-# default directory: ./anal-probe-plugins
-anal-probe https://example.com
+# default directory: ./vibetesting-agent-plugins
+vibetesting-agent https://example.com
 
 # or point at any directory
-anal-probe https://example.com --plugins ./my-templates
+vibetesting-agent https://example.com --plugins ./my-templates
 
 # run ONLY the plugins category
-anal-probe https://example.com --only plugins --plugins ./plugins/examples
+vibetesting-agent https://example.com --only plugins --plugins ./plugins/examples
 ```
 
 Each template describes **one** request and a set of matchers over the response. If the matchers match,
-anal-probe emits a **failing finding** with id `plugins.<your-template-id>`. If nothing matches, nothing
+vibetesting-agent emits a **failing finding** with id `plugins.<your-template-id>`. If nothing matches, nothing
 is emitted for that template. A single info finding `plugins.loaded` reports how many templates ran
 (or `plugins.none` when the directory is absent/empty). A template that fails schema validation is
 **skipped** (with an info finding naming the file) — a bad template can never break the scan.

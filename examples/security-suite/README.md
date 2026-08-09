@@ -2,7 +2,7 @@
 
 Config-driven security checks generalized from an app-specific Playwright suite (originally ~1,900
 db-nextjs-fresh tests) into checks that run against **any deployed app** — a URL plus a few auth tokens.
-No backend, no test server, no browser: plain `fetch` over the shipped `anal-probe` testkit.
+No backend, no test server, no browser: plain `fetch` over the shipped `vibetesting-agent` testkit.
 
 ## What it checks
 
@@ -14,7 +14,7 @@ No backend, no test server, no browser: plain `fetch` over the shipped `anal-pro
 | Sensitive-field leakage | batch-10 auth-debug secrets | responses don't return `password`/`access_token`/`service_role`/… |
 
 Cross-tenant (multi-tenant) isolation has its own browser recipe in `../tenant-isolation/`.
-The scanner itself (`anal-probe <url>`) still covers headers/TLS/CORS/cookies/open-redirect/exposure/
+The scanner itself (`vibetesting-agent <url>`) still covers headers/TLS/CORS/cookies/open-redirect/exposure/
 secrets/DNS/SEO/a11y/perf/agent-readiness — and now **auth-debug endpoint secret leakage**.
 
 ## Use

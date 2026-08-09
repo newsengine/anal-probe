@@ -1,6 +1,6 @@
-# Contributing to anal-probe
+# Contributing to vibetesting-agent
 
-Thanks for helping make anal-probe better. It's a **zero-dependency, black-box** web scanner, and a
+Thanks for helping make vibetesting-agent better. It's a **zero-dependency, black-box** web scanner, and a
 few principles keep it that way.
 
 ## Ground rules

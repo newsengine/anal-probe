@@ -1,7 +1,7 @@
 // src/components.ts
 // OWASP A06:2021 — Vulnerable & Outdated Components, for CLIENT-SIDE JavaScript libraries (a retire.js-style
 // pass). Every real security review checks whether the page ships a jQuery/Angular/Bootstrap/Lodash/etc with a
-// known CVE; anal-probe's `cve` mode covers the SERVER stack via NVD, but nothing looked at the JS the browser
+// known CVE; vibetesting-agent's `cve` mode covers the SERVER stack via NVD, but nothing looked at the JS the browser
 // actually loads. This detects library + version from script/link URLs and inline banners (no code execution),
 // then matches a curated table of known-vulnerable version ranges. Black-box, zero-dependency.
 

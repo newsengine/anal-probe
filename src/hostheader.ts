@@ -12,7 +12,7 @@ import { safeFetch } from './core.js';
 const f = (id: string, title: string, severity: Severity, pass: boolean, detail: string, fix?: string): Finding =>
   ({ category: 'security', id, title, severity, pass, detail, fix });
 
-const MARKER = 'anal-probe-hhi.example';
+const MARKER = 'vibetesting-agent-hhi.example';
 
 export async function hostHeaderChecks(ctx: ScanContext): Promise<Finding[]> {
   // Host itself is a forbidden fetch header, but the reverse-proxy overrides are the real-world vector.

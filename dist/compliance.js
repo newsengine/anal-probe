@@ -1,5 +1,5 @@
 // src/compliance.ts
-// Maps anal-probe findings to recognized standards — OWASP ASVS 4.0.3, OWASP Top 10 (2021), and the
+// Maps vibetesting-agent findings to recognized standards — OWASP ASVS 4.0.3, OWASP Top 10 (2021), and the
 // OWASP Web Security Testing Guide (WSTG) — and reports coverage against the black-box-testable subset of
 // ASVS Level 1. This is what lets a scan double as an OWASP conformance check. Refs are keyed by
 // finding-id PREFIX (many findings share an id stem, e.g. cookie.<name>, exposed/<path>).

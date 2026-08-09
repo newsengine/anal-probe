@@ -37,7 +37,7 @@ export async function crawlAudit(startUrl, opts = {}) {
         ({ chromium } = await import('playwright-core'));
     }
     catch {
-        return [{ category: 'reliability', id: 'crawl.missing-dep', title: 'crawl mode needs playwright-core', severity: 'info', pass: true, detail: 'run `npm i -D playwright-core` to enable `anal-probe crawl`' }];
+        return [{ category: 'reliability', id: 'crawl.missing-dep', title: 'crawl mode needs playwright-core', severity: 'info', pass: true, detail: 'run `npm i -D playwright-core` to enable `vibetesting-agent crawl`' }];
     }
     if (opts.chromeProfile) {
         const { launchProfile, defaultProfilesDir } = await import('./browser-auth.js');

@@ -182,7 +182,7 @@ export function evaluateTemplate(template, res) {
     return cond === 'or' ? results.some(Boolean) : results.every(Boolean);
 }
 // ───────────────────────────── loading + running (I/O) ─────────────────────────────
-const DEFAULT_DIR = './anal-probe-plugins';
+const DEFAULT_DIR = './vibetesting-agent-plugins';
 async function loadTemplates(dir) {
     let entries;
     try {
@@ -214,7 +214,7 @@ async function loadTemplates(dir) {
 }
 /**
  * `plugins` category runner. Loads user JSON templates from `ctx.opts.pluginsDir` (default
- * ./anal-probe-plugins), runs each as one GET/HEAD, and emits a failing Finding per matched template.
+ * ./vibetesting-agent-plugins), runs each as one GET/HEAD, and emits a failing Finding per matched template.
  * A malformed template can never break the run: bad files are skipped with an info finding. Emits a
  * `plugins.loaded` info-pass summarizing how many ran, or `plugins.none` when the dir is absent/empty.
  */

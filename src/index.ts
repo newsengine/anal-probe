@@ -1,4 +1,4 @@
-// Public API for @newsengine/anal-probe.
+// Public API for @newsengine/vibetesting-agent.
 export {
   probe, scan, summarize, discoverPages, normalizeUrl, ALL_CATEGORIES,
   type Finding, type Severity, type Category, type ScanOptions, type ProbeOptions, type ScanContext,

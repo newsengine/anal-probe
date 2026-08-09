@@ -170,7 +170,10 @@ export const html = {
     },
     h1Count: (h) => (h.match(/<h1[\s>]/gi) || []).length,
     // Inputs that should be labelled (excludes hidden/submit/button) vs total <label> count.
-    inputsNeedingLabel: (h) => (h.match(/<input\b(?![^>]*\btype\s*=\s*["'](?:hidden|submit|button|image|reset)["'])[^>]*>/gi) || []).length,
+    // An aria-label / aria-labelledby / title attribute IS a valid accessible name
+    // (WCAG 4.1.2), so inputs carrying one don't need a <label> — counting them
+    // produced false positives on pages whose only input was aria-labelled.
+    inputsNeedingLabel: (h) => (h.match(/<input\b(?![^>]*\btype\s*=\s*["'](?:hidden|submit|button|image|reset)["'])(?![^>]*\baria-label(?:ledby)?\s*=)(?![^>]*\btitle\s*=)[^>]*>/gi) || []).length,
     labelCount: (h) => (h.match(/<label[\s>]/gi) || []).length,
     // http:// resources referenced from the page (mixed content when the page is https).
     insecureRefs: (h) => matchAllGroups(h, /(?:src|href)\s*=\s*["'](http:\/\/[^"']+)["']/gi).filter((u) => !/^http:\/\/(localhost|127\.)/i.test(u)),

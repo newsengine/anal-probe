@@ -48,7 +48,7 @@ export interface ScanOptions {
   maxCrawl?: number;
   /** Per-request network timeout in ms (default 10000). Guards against sites that never respond. */
   timeoutMs?: number;
-  /** Directory of user JSON plugin templates for the `plugins` category (default ./anal-probe-plugins). */
+  /** Directory of user JSON plugin templates for the `plugins` category (default ./vibetesting-agent-plugins). */
   pluginsDir?: string;
   /** Extra headers (e.g. Cookie / Authorization) sent ONLY on same-origin requests, so the scan can
    *  reach pages behind login. Never attached to the attack-probe requests (CORS/open-redirect) or any

@@ -40,7 +40,7 @@ export async function crawlAudit(startUrl: string, opts: CrawlOptions = {}): Pro
   // Acquire an authenticated browser session (profile), or a plain/cookie context.
   let browser: any, closeSession: (() => Promise<void>) | null = null, chromium: any;
   try { ({ chromium } = await import('playwright-core')); }
-  catch { return [{ category: 'reliability', id: 'crawl.missing-dep', title: 'crawl mode needs playwright-core', severity: 'info', pass: true, detail: 'run `npm i -D playwright-core` to enable `anal-probe crawl`' }]; }
+  catch { return [{ category: 'reliability', id: 'crawl.missing-dep', title: 'crawl mode needs playwright-core', severity: 'info', pass: true, detail: 'run `npm i -D playwright-core` to enable `vibetesting-agent crawl`' }]; }
 
   if (opts.chromeProfile) {
     const { launchProfile, defaultProfilesDir } = await import('./browser-auth.js');

@@ -1,0 +1,6 @@
+Contact: mailto:mike@dynamicbusiness.com.au
+Expires: 2027-08-01T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://vibetestingagent.com/.well-known/security.txt
+Policy: https://vibetestingagent.com/legal/acceptable-use
+Hiring: https://vibetestingagent.com

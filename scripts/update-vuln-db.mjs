@@ -19,7 +19,7 @@ const FEED_URLS = [
   'https://raw.githubusercontent.com/RetireJS/retire.js/master/repository/jsrepository.json',
 ];
 
-// anal-probe detector keys → candidate retire.js component names (lowercased, matched case-insensitively).
+// vibetesting-agent detector keys → candidate retire.js component names (lowercased, matched case-insensitively).
 // Only these libraries have detectors in src/components.ts, so only these are pulled from the feed.
 const LIBRARY_MAP = {
   jquery: ['jquery'],
@@ -82,7 +82,7 @@ const SEED = {
 
 // ---- pure, exported helpers (unit-testable) ----
 
-/** Normalize a retire.js / advisory severity string to anal-probe's high|medium|low. */
+/** Normalize a retire.js / advisory severity string to vibetesting-agent's high|medium|low. */
 export function normalizeSeverity(sev) {
   const s = String(sev || '').toLowerCase().trim();
   if (s === 'critical' || s === 'high') return 'high';
@@ -111,9 +111,9 @@ function belowOfRange(range) {
 }
 
 /**
- * Map one retire.js component's `vulnerabilities[]` into anal-probe's {below,severity,ref,note}[] shape.
+ * Map one retire.js component's `vulnerabilities[]` into vibetesting-agent's {below,severity,ref,note}[] shape.
  * Each vuln has `ranges: [{ below?, atOrAbove? }]`; only ranges with a concrete `below` (first-safe version)
- * are usable by anal-probe's version-less-than matcher. One emitted entry per bounded range.
+ * are usable by vibetesting-agent's version-less-than matcher. One emitted entry per bounded range.
  */
 export function mapRetireVulns(vulns) {
   const out = [];
@@ -135,7 +135,7 @@ export function mapRetireVulns(vulns) {
   return out;
 }
 
-/** Extract only anal-probe's libraries from the retire.js feed, keyed by anal-probe detector name. */
+/** Extract only vibetesting-agent's libraries from the retire.js feed, keyed by vibetesting-agent detector name. */
 export function extractFromFeed(feed) {
   // Build a case-insensitive lookup of the feed's components.
   const lower = new Map();
@@ -204,7 +204,7 @@ async function fetchFeed() {
   let lastErr;
   for (const url of FEED_URLS) {
     try {
-      const res = await fetch(url, { headers: { 'user-agent': 'anal-probe update-vuln-db' } });
+      const res = await fetch(url, { headers: { 'user-agent': 'vibetesting-agent update-vuln-db' } });
       if (!res.ok) { lastErr = new Error(`HTTP ${res.status} for ${url}`); continue; }
       const json = await res.json();
       return { json, url };

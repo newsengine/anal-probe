@@ -1,4 +1,4 @@
-// Public API for @newsengine/anal-probe.
+// Public API for @newsengine/vibetesting-agent.
 export { probe, scan, summarize, discoverPages, normalizeUrl, ALL_CATEGORIES, } from './probe.js';
 export { loadConfig } from './config.js';
 export { securityChecks, secretChecks, exposureChecks, reliabilityChecks, seoChecks, a11yChecks, performanceChecks, } from './checks.js';

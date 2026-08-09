@@ -1,0 +1,38 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "vibetesting-agent",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-07-31",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "account_id": "284c38635bb5bf7613ae1c038f15f878",
+  "workers_dev": true,
+  "preview_urls": true,
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "vibetesting-agent"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "vibetesting-agent",
+      "database_id": "ecb9fca5-9769-49e1-b284-04ba7a5d3f2a",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "NEXT_PUBLIC_APP_URL": "https://vibetestingagent.com",
+    "NEXT_PUBLIC_LEGAL_NAME": "Newsengine",
+    "NEXT_PUBLIC_SUPPORT_EMAIL": "mike@dynamicbusiness.com.au",
+    "NEXT_PUBLIC_APP_NAME": "VibeTesting Agent"
+  }
+}

@@ -37,7 +37,7 @@ const RUNNERS: Record<Category, (ctx: ScanContext) => Promise<Finding[]>> = {
 
 export const ALL_CATEGORIES = Object.keys(RUNNERS) as Category[];
 
-/** Add https:// when the user typed a bare domain, so `anal-probe example.com` just works. */
+/** Add https:// when the user typed a bare domain, so `vibetesting-agent example.com` just works. */
 export function normalizeUrl(input: string): string {
   return /^[a-z][a-z0-9+.-]*:\/\//i.test(input) ? input : `https://${input}`;
 }

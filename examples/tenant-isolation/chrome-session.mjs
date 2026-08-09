@@ -18,7 +18,7 @@ function expand(p) { return p.startsWith('~') ? path.join(os.homedir(), p.slice(
 
 /** Build a minimal throwaway user-data-dir containing just one source profile's cookies. */
 export function seedProfile(profilesDir, srcProfile, tag) {
-  const tmp = path.join(os.tmpdir(), `anal-probe-tenant-${tag}`);
+  const tmp = path.join(os.tmpdir(), `vibetesting-agent-tenant-${tag}`);
   fs.rmSync(tmp, { recursive: true, force: true });
   fs.mkdirSync(path.join(tmp, 'Default', 'Network'), { recursive: true });
   const srcDir = path.join(expand(profilesDir), srcProfile);

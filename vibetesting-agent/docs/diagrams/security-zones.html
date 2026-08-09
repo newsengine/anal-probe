@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Web App Security Zones</title>
+<style>
+  :root {
+    --bg: #0a0e12;
+    --ink: #e8eef2;
+    --mut: #8b9aab;
+    --edge: #1e2a36;
+    --z0: #3d4f63;
+    --z1: #1a4d6e;
+    --z2: #0d5c4d;
+    --z3: #5c4a0d;
+    --z4: #5c1f2e;
+    --z5: #3a1f5c;
+    --ok: #3dd68c;
+    --warn: #f0b429;
+    --no: #f07178;
+    --partial: #82aaff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    background: radial-gradient(1200px 600px at 50% -10%, #132033, var(--bg));
+    color: var(--ink);
+    padding: 32px 28px 48px;
+  }
+  h1 {
+    font-family: ui-monospace, "JetBrains Mono", monospace;
+    font-size: 22px;
+    letter-spacing: -0.02em;
+    margin: 0 0 6px;
+  }
+  .sub { color: var(--mut); font-size: 13px; max-width: 920px; line-height: 1.5; margin-bottom: 22px; }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 22px; font-size: 12px;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot.full { background: var(--ok); }
+  .dot.part { background: var(--partial); }
+  .dot.out { background: var(--no); }
+  .stack {
+    display: flex; flex-direction: column; gap: 12px; max-width: 1100px;
+  }
+  .zone {
+    border: 1px solid var(--edge);
+    border-radius: 14px;
+    padding: 14px 16px 16px;
+    position: relative;
+    background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent);
+  }
+  .zone::before {
+    content: "";
+    position: absolute; left: 0; top: 12px; bottom: 12px; width: 4px;
+    border-radius: 4px; background: var(--accent, var(--z0));
+  }
+  .zone.z0 { --accent: #6b7c90; }
+  .zone.z1 { --accent: #3aa0ff; }
+  .zone.z2 { --accent: #2dd4a8; }
+  .zone.z3 { --accent: #e6b422; }
+  .zone.z4 { --accent: #ff6b8a; }
+  .zone.z5 { --accent: #b388ff; }
+  .zh {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 14px;
+    margin-bottom: 10px; padding-left: 8px;
+  }
+  .zh h2 {
+    margin: 0; font-size: 15px; font-family: ui-monospace, monospace;
+  }
+  .tag {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--mut); border: 1px solid var(--edge); border-radius: 999px;
+    padding: 2px 8px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+    padding-left: 8px;
+  }
+  .card {
+    border: 1px solid var(--edge);
+    border-radius: 10px;
+    padding: 10px 11px;
+    background: rgba(0,0,0,0.25);
+    min-height: 88px;
+  }
+  .card .t { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+  .card .d { font-size: 11px; color: var(--mut); line-height: 1.35; }
+  .card .cov {
+    margin-top: 8px; font-size: 10px; font-family: ui-monospace, monospace;
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 7px; border-radius: 6px; border: 1px solid var(--edge);
+  }
+  .cov.full { color: var(--ok); border-color: rgba(61,214,140,.35); background: rgba(61,214,140,.08); }
+  .cov.part { color: var(--partial); border-color: rgba(130,170,255,.35); background: rgba(130,170,255,.08); }
+  .cov.out { color: var(--no); border-color: rgba(240,113,120,.35); background: rgba(240,113,120,.08); }
+  .arrow {
+    text-align: center; color: var(--mut); font-size: 11px; font-family: ui-monospace, monospace;
+    letter-spacing: 0.04em;
+  }
+  .footer {
+    margin-top: 22px; font-size: 11px; color: var(--mut); max-width: 1100px; line-height: 1.45;
+  }
+  .title-row { display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap; }
+  .badge {
+    font-family: ui-monospace, monospace; font-size: 11px;
+    border: 1px solid var(--edge); border-radius: 8px; padding: 8px 12px;
+    background: rgba(0,0,0,.3);
+  }
+</style>
+</head>
+<body>
+  <div class="title-row">
+    <div>
+      <h1>Web application security zones</h1>
+      <p class="sub">
+        Trust boundaries from the public internet to secrets &amp; multi-tenant isolation.
+        Color chips show what <strong style="color:var(--ink)">VibeTesting Agent</strong> covers today vs what needs auth, active attack, or white-box tests.
+      </p>
+    </div>
+    <div class="badge">VibeTesting Agent · OWASP WSTG lens</div>
+  </div>
+
+  <div class="legend">
+    <span><i class="dot full"></i> Covered (black-box / automated)</span>
+    <span><i class="dot part"></i> Partial (mapped or opt-in / white-box helper)</span>
+    <span><i class="dot out"></i> Out of scope (auth, active exploit, or process)</span>
+  </div>
+
+  <div class="stack">
+    <div class="zone z0">
+      <div class="zh">
+        <h2>Zone 0 — External / Internet edge</h2>
+        <span class="tag">Attacker &amp; CDN / DNS / TLS</span>
+      </div>
+      <div class="grid">
+        <div class="card"><div class="t">DNS &amp; email hygiene</div><div class="d">SPF, DMARC, CAA, dangling CNAME / takeover heuristics</div><div class="cov full">● covered</div></div>
+        <div class="card"><div class="t">TLS transport</div><div class="d">HTTPS, redirect, protocol/cipher grade, cert expiry, HSTS</div><div class="cov full">● covered</div></div>
+        <div class="card"><div class="t">Host intel (passive)</div><div class="d">Resolve IPs, reverse DNS, CDN fingerprint — no port blast by default</div><div class="cov part">◐ partial · recon opt-in</div></div>
+        <div class="card"><div class="t">Recon / OSINT</div><div class="d">Search engines, GitHub leaks, subdomains, archives</div><div class="cov out">○ out of scope</div></div>
+      </div>
+    </div>
+    <div class="arrow">↓ unauthenticated HTTP(S) to origin</div>
+
+    <div class="zone z1">
+      <div class="zh">
+        <h2>Zone 1 — Public web surface</h2>
+        <span class="tag">Pages · headers · client assets</span>
+      </div>
+      <div class="grid">
+        <div class="card"><div class="t">Security headers</div><div class="d">CSP, HSTS, nosniff, clickjacking, COOP/CORP, Permissions-Policy</div><div class="cov full">● covered</div></div>
+        <div class="card"><div class="t">HTML / SEO / a11y hygiene</div><div class="d">Title, meta, canonical, lang, alt, labels, mixed content</div><div class="cov full">● covered</div></div>
+        <div class="card"><div class="t">Client secrets &amp; source maps</div><div class="d">Keys in bundles/HTML, downloadable .map files</div><div class="cov full">● covered</div></div>
+        <div class="card"><div class="t">Vulnerable JS libraries</div><div class="d">retire.js-style version ranges (OWASP A06)</div><div class="cov full">● covered</div></div>
+        <div class="card"><div class="t">DOM XSS / open redirect / SRI</div><div class="d">High-confidence client sinks, redirect params, third-party integrity</div><div class="cov full">● covered</div></div>
+        <div class="card"><div class="t">Active XSS / SQLi fuzz</div><div class="d">Payload-driven injection across every field</div><div class="cov out">○ not safe black-box</div></div>
+      </div>
+    </div>
+    <div class="arrow">↓ still public, but “shouldn’t be”</div>
+
+    <div class="zone z2">
+      <div class="zh">
+        <h2>Zone 2 — Exposure &amp; misconfig</h2>
+        <span class="tag">Config · debug · backups</span>
+      </div>
+      <div class="grid">
+        <div class="card"><div class="t">Exposed paths</div><div class="d">.env, .git, backups, actuator, swagger, metrics…</div><div class="cov full">● covered</div></div>
+        <div class="card"><div class="t">Framework footguns</div><div class="d">Next/WP/Laravel/Django/Rails/Spring/ASP.NET probes</div><div class="cov full">● covered</div></div>
+        <div class="card"><div class="t">HTTP methods / CORS / TRACE</div><div class="d">Dangerous verbs, reflected Origin + credentials</div><div class="cov full">● covered</div></div>
+        <div class="card"><div class="t">security.txt / robots / llms</div><div class="d">Researcher contact + agent readiness signals</div><div class="cov full">● covered</div></div>
+      </div>
+    </div>
+    <div class="arrow">↓ authentication boundary (session / OAuth / API key)</div>
+
+    <div class="zone z3">
+      <div class="zh">
+        <h2>Zone 3 — Internal product (dashboard)</h2>
+        <span class="tag">Logged-in UI · workflows</span>
+      </div>
+      <div class="grid">
+        <div class="card"><div class="t">AuthN / login flows</div><div class="d">WorkOS, MFA, lockout, password policy, session fixation</div><div class="cov out">○ needs auth testing</div></div>
+        <div class="card"><div class="t">Dashboard authorization</div><div class="d">Can user A see user B’s projects/scans?</div><div class="cov part">◐ white-box IDOR helpers</div></div>
+        <div class="card"><div class="t">CSRF on state-changing forms</div><div class="d">Heuristic on public HTML forms; full CSRF needs session</div><div class="cov part">◐ partial heuristic</div></div>
+        <div class="card"><div class="t">Business logic</div><div class="d">Billing skips, race conditions, workflow abuse</div><div class="cov out">○ out of scope</div></div>
+      </div>
+    </div>
+    <div class="arrow">↓ machine identity</div>
+
+    <div class="zone z4">
+      <div class="zh">
+        <h2>Zone 4 — APIs, keys &amp; webhooks</h2>
+        <span class="tag">Bearer keys · MCP · Stripe · GitHub</span>
+      </div>
+      <div class="grid">
+        <div class="card"><div class="t">API misconfig</div><div class="d">Open GraphQL introspection, public swagger, method sprawl</div><div class="cov full">● covered (black-box)</div></div>
+        <div class="card"><div class="t">API authZ (BOLA / BFLA)</div><div class="d">Cross-user object access, role bypass</div><div class="cov part">◐ testkit idor/rbac</div></div>
+        <div class="card"><div class="t">API keys / JWT in browser</div><div class="d">Leaked keys + JWT hygiene (alg:none, exp)</div><div class="cov full">● covered</div></div>
+        <div class="card"><div class="t">Webhook authenticity</div><div class="d">Stripe/GitHub signature verification bugs</div><div class="cov out">○ app-specific / unit test</div></div>
+      </div>
+    </div>
+    <div class="arrow">↓ strongest isolation</div>
+
+    <div class="zone z5">
+      <div class="zh">
+        <h2>Zone 5 — Account &amp; tenant separation</h2>
+        <span class="tag">Multi-tenant core</span>
+      </div>
+      <div class="grid">
+        <div class="card"><div class="t">IDOR / horizontal privilege</div><div class="d">Tenant B reaches tenant A resources</div><div class="cov part">◐ idorProbe / separation mode</div></div>
+        <div class="card"><div class="t">RBAC / vertical privilege</div><div class="d">Anonymous / user / admin matrix</div><div class="cov part">◐ rbacProbe</div></div>
+        <div class="card"><div class="t">Mass assignment</div><div class="d">Client forges role / owner fields</div><div class="cov part">◐ massAssignmentProbe</div></div>
+        <div class="card"><div class="t">Data isolation on list APIs</div><div class="d">Shared IDs across two sessions</div><div class="cov part">◐ dataIsolationProbe</div></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="footer">
+    <strong style="color:var(--ink)">Not a substitute for a full WSTG engagement.</strong>
+    Anal-probe automates the <em>black-box observable</em> slice of OWASP WSTG / ASVS L1.
+    Zones 3–5 need authenticated sessions, two accounts, and often active payloads — that is ZAP/Burp/manual + our white-box helpers, not a single URL scan.
+  </p>
+</body>
+</html>

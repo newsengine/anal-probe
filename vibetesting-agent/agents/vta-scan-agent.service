@@ -1,0 +1,18 @@
+[Unit]
+Description=VibeTesting Agent full-suite scan worker (anal-probe)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/vta
+EnvironmentFile=/opt/vta/agent.env
+ExecStart=/usr/bin/node /opt/vta/ovh-scan-agent.mjs
+Restart=always
+RestartSec=5
+# Full scans can run a while
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

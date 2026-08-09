@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #070a08;
+  --panel: #0d120e;
+  --edge: #1b271f;
+  --ink: #d9e6da;
+  --mut: #7f9585;
+  --lime: #a9ef4f;
+  --hi: #ff5f56;
+  --md: #ffb638;
+  --lo: #f2e85c;
+}
+
+body {
+  color: var(--ink);
+  background: var(--bg);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+.mono {
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+.panel {
+  @apply rounded-xl border border-[var(--edge)] bg-[var(--panel)];
+}
+
+.btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition;
+}
+
+.btn-primary {
+  @apply btn bg-[var(--lime)] text-[#08120a] hover:brightness-110;
+}
+
+.btn-ghost {
+  @apply btn border border-[var(--edge)] text-[var(--ink)] hover:border-[var(--lime)] hover:text-[var(--lime)];
+}
+
+.input {
+  @apply w-full rounded-lg border border-[var(--edge)] bg-black/30 px-3 py-2.5 text-sm text-[var(--ink)] outline-none focus:border-[var(--lime)];
+}
+
+.label {
+  @apply mb-1.5 block text-xs uppercase tracking-wider text-[var(--mut)];
+}
+
+/* Lite scan terminal log */
+.scan-log {
+  scrollbar-width: thin;
+  scrollbar-color: var(--edge) transparent;
+}
+.scan-log::-webkit-scrollbar {
+  width: 8px;
+}
+.scan-log::-webkit-scrollbar-thumb {
+  background: var(--edge);
+  border-radius: 4px;
+}

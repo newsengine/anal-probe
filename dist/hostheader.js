@@ -7,7 +7,7 @@
 // a single GET with request headers; nothing is written.
 import { safeFetch } from './core.js';
 const f = (id, title, severity, pass, detail, fix) => ({ category: 'security', id, title, severity, pass, detail, fix });
-const MARKER = 'anal-probe-hhi.example';
+const MARKER = 'vibetesting-agent-hhi.example';
 export async function hostHeaderChecks(ctx) {
     // Host itself is a forbidden fetch header, but the reverse-proxy overrides are the real-world vector.
     const spoof = { 'X-Forwarded-Host': MARKER, 'X-Forwarded-Server': MARKER, 'X-Host': MARKER, 'Forwarded': `host=${MARKER}` };

@@ -160,7 +160,7 @@ test('toSarif produces valid 2.1.0 with rules + results for failing findings onl
   const sarif = toSarif(findings, { url: 'https://x.example', version: '1.2.3' }) as any;
   assert.equal(sarif.version, '2.1.0');
   const run = sarif.runs[0];
-  assert.equal(run.tool.driver.name, 'anal-probe');
+  assert.equal(run.tool.driver.name, 'vibetesting-agent');
   assert.equal(run.tool.driver.version, '1.2.3');
   assert.equal(run.results.length, 1, 'only the failing finding becomes a result');
   assert.equal(run.results[0].ruleId, 'header.hsts');
@@ -646,7 +646,7 @@ test('discoverPages returns capped same-origin pages, ignoring off-origin + frag
 });
 
 test('loadConfig reads a file, tolerates a missing default', () => {
-  const path = '/tmp/anal-probe-test-config.json';
+  const path = '/tmp/vibetesting-agent-test-config.json';
   writeFileSync(path, JSON.stringify({ failOn: 'medium', skip: ['a11y'], quiet: true }));
   const { config, error } = loadConfig(path);
   rmSync(path, { force: true });
@@ -654,7 +654,7 @@ test('loadConfig reads a file, tolerates a missing default', () => {
   assert.equal(config.failOn, 'medium');
   assert.deepEqual(config.skip, ['a11y']);
 
-  const missing = loadConfig('/tmp/anal-probe-does-not-exist.json');
+  const missing = loadConfig('/tmp/vibetesting-agent-does-not-exist.json');
   assert.ok(missing.error, 'an explicit missing path is an error');
   assert.deepEqual(loadConfig(undefined).config, {}, 'a missing default file is fine (empty config)');
 });

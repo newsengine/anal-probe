@@ -1,17 +1,37 @@
-# @newsengine/anal-probe
+# @newsengine/vibetesting-agent
 
 **Point it at any deployed app and it tells you everything wrong with it** — leaked API keys in your
 JS bundle, an exposed `.env`/`.git`, broken links, missing security headers, SEO/accessibility/perf
 gaps. One command, **zero install**, no source access, no headless browser:
 
 ```bash
-npx github:newsengine/anal-probe https://your-app.example.com
+npx github:newsengine/vibetesting-agent https://your-app.example.com
 ```
 
 📄 **Landing page:** [`docs/index.html`](docs/index.html) (self-contained; serve via GitHub Pages from `/docs`).
 
+☁️ **VibeTesting Agent (hosted):** https://vibetestingagent.com — dashboard in [`vibetesting-agent/`](vibetesting-agent/).
+Plans: **$25/mo weekly** · **$100/mo daily** · **$250/mo every commit**. WorkOS + Stripe. Ownership verification required.
+OSS CLI stays free. Meta repo: https://github.com/mikenicholls-msv/vibetesting-agent
+
+### Security review (agent report + Gherkin)
+Same shape as a Claude security artifact / `findings-for-agent.md` — ranked **P1/P2** with fix + verify, plus BDD:
+
+```bash
+# Every software update / /security-review
+npx github:newsengine/vibetesting-agent review https://your-app.example.com
+
+# Or flags on any scan:
+npx github:newsengine/vibetesting-agent https://your-app.example.com \
+  --agent-report security-review.md \
+  --gherkin features/security/hygiene.feature
+
+# New repo: scaffold suite + CI + baseline
+npx github:newsengine/vibetesting-agent init https://your-app.example.com --name my-app
+```
+
 > ### ⚖️ Authorized use only
-> anal-probe is for testing systems **you own or have explicit written permission to test**. The default
+> vibetesting-agent is for testing systems **you own or have explicit written permission to test**. The default
 > scan is read-only, but it can be run in active modes (port scanning, fuzzing). **Scanning systems you
 > don't own may be illegal** (e.g. the US Computer Fraud and Abuse Act, the UK Computer Misuse Act, and
 > equivalents elsewhere). You are solely responsible for having authorization for every target. Active
@@ -39,7 +59,7 @@ every failing finding comes with a one-line **fix**. Exits non-zero so it double
   JS errors, broken images, failed requests + **safe** reflected-input/SQL-error fuzz on search forms;
   GET-only, never submits mutating forms), and `separation` (two-account cross-tenant isolation test).
   All need `playwright-core`.
-- **CVE checks**: `audit` covers dependency CVEs (npm advisory DB); `recon --cve` / `anal-probe cve
+- **CVE checks**: `audit` covers dependency CVEs (npm advisory DB); `recon --cve` / `vibetesting-agent cve
   <product> <version>` correlate detected service versions against NVD.
 - **Standards mapping** (`--compliance`): reports coverage against **OWASP ASVS 4.0.3 Level 1**
   (23/25 black-box requirements), **OWASP Top 10 (2021)**, and **WSTG** — see [docs/compliance.md](docs/compliance.md).
@@ -95,7 +115,7 @@ injection** probe (spoofed `X-Forwarded-Host` reflected into URLs → password-r
 `eval` sink in inline script).
 
 ### 🔌 `plugins` — your own checks, no code
-Point `--plugins <dir>` at a folder of **JSON** templates and anal-probe runs them as first-class findings —
+Point `--plugins <dir>` at a folder of **JSON** templates and vibetesting-agent runs them as first-class findings —
 no fork, no TypeScript. A template is a `request` (GET/HEAD only) plus `matchers` (`status` / `header` /
 `body-regex` / `body-contains`, combined with `matchers-condition: and|or`, any matcher invertible with
 `negative: true`) and output metadata (`id`/`title`/`severity`/`fix`/`owasp`/`cwe`). Malformed templates are
@@ -145,8 +165,8 @@ gzip/brotli compression, oversized HTML, script count, long-lived cache headers 
 ### `audit` — dependency vulnerabilities (white-box, runs in the repo)
 Wraps `npm audit --json` and gates CI on severity:
 ```bash
-anal-probe audit --level high          # fail on any high/critical advisory (default)
-anal-probe audit --prod --level moderate --json
+vibetesting-agent audit --level high          # fail on any high/critical advisory (default)
+vibetesting-agent audit --prod --level moderate --json
 ```
 
 > Shipped: SARIF, baseline/diff, CSP linting, DNS/email hygiene, TLS protocol/cipher grading,
@@ -162,7 +182,7 @@ name: security
 on: [pull_request, workflow_dispatch]
 jobs:
   probe:
-    uses: newsengine/anal-probe/.github/workflows/probe.yml@main
+    uses: newsengine/vibetesting-agent/.github/workflows/probe.yml@main
     with:
       url: https://your-deploy.example.com
       cors_path: /api/public/health        # optional
@@ -174,11 +194,11 @@ jobs:
 > **Private repo?** `uses:` a reusable workflow from a private repo needs org "Actions access" enabled.
 > The portable pattern that always works is **checkout-with-token + run the committed `dist/`** (this
 > repo commits its build, so there's no build step). One-time: add a fine-grained PAT with
-> **Contents: Read** on `newsengine/anal-probe` as an **org secret** named `ANALPROBE_TOKEN`:
+> **Contents: Read** on `newsengine/vibetesting-agent` as an **org secret** named `ANALPROBE_TOKEN`:
 > ```yaml
 >   steps:
 >     - uses: actions/checkout@v4
->       with: { repository: newsengine/anal-probe, token: '${{ secrets.ANALPROBE_TOKEN }}', path: .kit }
+>       with: { repository: newsengine/vibetesting-agent, token: '${{ secrets.ANALPROBE_TOKEN }}', path: .kit }
 >     - run: node .kit/dist/cli.js https://your-deploy.example.com --fail-on high
 > ```
 
@@ -190,7 +210,7 @@ jobs:
     permissions: { security-events: write, contents: read }
     steps:
       - uses: actions/checkout@v4
-        with: { repository: newsengine/anal-probe, token: '${{ secrets.ANALPROBE_TOKEN }}', path: .kit }
+        with: { repository: newsengine/vibetesting-agent, token: '${{ secrets.ANALPROBE_TOKEN }}', path: .kit }
       - run: node .kit/dist/cli.js https://your-deploy.example.com --sarif > probe.sarif
         continue-on-error: true          # don't block the upload; gate in a separate step if you want
       - uses: github/codeql-action/upload-sarif@v3
@@ -207,10 +227,10 @@ node .kit/dist/cli.js https://your-deploy.example.com --baseline probe-baseline.
 ## Use the CLI locally / ad-hoc
 ```bash
 # full scan (all 13 categories)
-npx github:newsengine/anal-probe https://app.example.com
+npx github:newsengine/vibetesting-agent https://app.example.com
 
 # scope it, gate harder, test CORS, machine-readable output
-npx github:newsengine/anal-probe https://app.example.com \
+npx github:newsengine/vibetesting-agent https://app.example.com \
   --only secrets,exposure,security \
   --cors-path /api/public/health --allow-report-only-csp \
   --fail-on medium --json
@@ -221,7 +241,7 @@ Flags: `--only <cats>` · `--skip <cats>` · `--cors-path <p>` · `--rate-limit-
 
 ## Use the white-box helpers in your tests
 ```ts
-import { idorProbe, checkSecurityHeaders } from '@newsengine/anal-probe';
+import { idorProbe, checkSecurityHeaders } from '@newsengine/vibetesting-agent';
 
 // Cross-tenant: authenticate as tenant B, try to read tenant A's resources — must be denied.
 const results = await idorProbe(tenantB, [
@@ -237,6 +257,19 @@ expect(checkSecurityHeaders(res.headers, { requireEnforcedCsp: true })).toEqual(
 ```bash
 npm install && npm run build && npm test
 ```
+
+### How we test that the checks work
+The suite is **true-positive + true-negative** fixtures, not just “it ran”:
+
+| Layer | What it proves | Command |
+|---|---|---|
+| Unit / matrix | Each secret rule hits a crafted sample; public-looking strings do not | `npm test` |
+| **known-bad fixture** | Required finding IDs *fail* (leaks, missing headers, exposure paths, open redirect) | `npm run test:fixtures` |
+| **known-good fixture** | Those same IDs do *not* fail (no false positives on a hardened app) | `npm run test:fixtures` |
+| Inventory hygiene | `SECRET_RULES` stays in sync with the coverage list | `npm test` |
+| Lint gate | ESLint clean on OSS sources | `npm test` (via `tests/lint.test.ts`) |
+
+Fixtures live under `tests/helpers/` (`startKnownBad` / `startKnownGood`). Required IDs are listed in `tests/helpers/inventory.ts` — add a new check? Add its ID to the inventory and make the fixture trip it.
 
 ## What "fail_on" means
 - `high` (default): fail CI only on HIGH findings (leaked secret, exposed `.env`/`.git`, missing HSTS/CSP, non-HTTPS, dangerous CORS).

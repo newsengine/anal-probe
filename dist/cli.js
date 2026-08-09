@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // src/cli.ts
-// `npx github:newsengine/anal-probe <url> [options]`
+// `npx github:newsengine/vibetesting-agent <url> [options]`
 // Point it at any deployed app and it reports everything wrong: leaked secrets, exposed files, broken
 // links, missing security headers, SEO/a11y/performance gaps. Exits non-zero so it can gate CI.
 //
@@ -10,16 +10,21 @@
 //   --rate-limit-path /api/health   burst-test this path for rate limiting (expects 429)
 //   --allow-report-only-csp         accept CSP Report-Only as a pass
 //   --max-crawl 25                  how many links/scripts to fetch-check
-//   --plugins <dir>                 dir of custom JSON plugin templates (default ./anal-probe-plugins)
+//   --plugins <dir>                 dir of custom JSON plugin templates (default ./vibetesting-agent-plugins)
 //   --fail-on high|medium|any       CI exit threshold (default high)
 //   --json                          machine-readable output
 //   --sarif                         emit SARIF 2.1.0 (for GitHub code scanning / upload-sarif)
 //   --baseline <file>               only fail on findings NOT in this baseline file
 //   --write-baseline <file>         write current failing findings as a baseline, then exit 0
+//   --agent-report <file.md>        ranked P1/P2 agent fix report (Claude/Cursor-ready)
+//   --gherkin <file.feature>        emit Gherkin security scenarios from findings
 //
-// Subcommand:
-//   anal-probe audit [--prod] [--level low|moderate|high|critical] [--json]   # npm audit gate
-import { readFileSync, writeFileSync } from 'node:fs';
+// Subcommands:
+//   vibetesting-agent audit [--prod] [--level low|moderate|high|critical] [--json]
+//   vibetesting-agent init <url> [--name app] [--force] [--cwd .]   # scaffold Gherkin + CI + review md
+//   vibetesting-agent review <url> [...]   # scan + agent-report + gherkin (security-review workflow)
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { probe, summarize, normalizeUrl, discoverPages, ALL_CATEGORIES } from './probe.js';
 import { runNpmAudit, failsAtLevel } from './audit.js';
 import { toSarif } from './sarif.js';
@@ -29,6 +34,9 @@ import { asvsCoverage, owaspTop10Hit, refsFor, OWASP_TOP10_NAMES, apiTop10Hit, c
 import { recon, parsePorts } from './active.js';
 import { identifyEdge } from './host.js';
 import { lookupCves } from './cve.js';
+import { renderAgentReport } from './agent-report.js';
+import { renderGherkinFeature } from './gherkin.js';
+import { initRepo } from './init.js';
 const VERSION = (() => {
     try {
         return JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
@@ -63,7 +71,7 @@ async function runAudit() {
         console.error('audit error:', result.error);
     }
     else {
-        console.log(`\n🔐 anal-probe audit (npm audit)\n`);
+        console.log(`\n🔐 vibetesting-agent audit (npm audit)\n`);
         for (const sev of ['critical', 'high', 'moderate', 'low', 'info'])
             console.log(`  ${sev}: ${result.counts[sev] ?? 0}`);
         console.log(`\n${result.total} total advisories\n`);
@@ -91,7 +99,7 @@ async function runBatch(targets, opts, o) {
         console.log(JSON.stringify(rows.map((r) => ({ url: r.url, summary: r.summary, failed: r.failed })), null, 2));
     }
     else {
-        console.log(`\n🔬 anal-probe — scanned ${targets.length} URL(s)\n`);
+        console.log(`\n🔬 vibetesting-agent — scanned ${targets.length} URL(s)\n`);
         for (const r of rows) {
             const s = r.summary;
             console.log(`${r.failed ? '🟥' : '✅'} ${r.url} — ${s.passed} passed, ${s.failed} failed  (🟥 ${s.failHigh} · 🟧 ${s.failMedium} · 🟨 ${s.failLow})`);
@@ -107,7 +115,7 @@ async function runBatch(targets, opts, o) {
 async function runRecon() {
     const target = process.argv[3];
     if (!target || target.startsWith('-')) {
-        console.error('usage: anal-probe recon <host|url> --yes-i-am-authorized [--ports common|all|top1000|22,80,...] [--cve] [--force] [--timeout <ms>] [--json]');
+        console.error('usage: vibetesting-agent recon <host|url> --yes-i-am-authorized [--ports common|all|top1000|22,80,...] [--cve] [--force] [--timeout <ms>] [--json]');
         process.exit(2);
         return;
     }
@@ -173,7 +181,7 @@ async function runRecon() {
                         console.log(`          • ${c.id}${c.severity ? ` [${c.severity}]` : ''}: ${c.summary}`);
                 }
                 else if (flag('--cve')) {
-                    console.log(`        identified: ${idn} — no CVEs matched (or NVD rate-limited; retry, or use \`anal-probe cve ${idn}\`)`);
+                    console.log(`        identified: ${idn} — no CVEs matched (or NVD rate-limited; retry, or use \`vibetesting-agent cve ${idn}\`)`);
                 }
                 else {
                     console.log(`        identified: ${idn}${p.version ? `  ↳ add --cve to check NVD (or see nvd.nist.gov)` : ''}`);
@@ -193,7 +201,7 @@ async function runRecon() {
 async function runBrowse() {
     const target = process.argv[3];
     if (!target || target.startsWith('-')) {
-        console.error('usage: anal-probe browse <url> [--pages N] [--timeout ms] [--json] [--quiet]  (needs: npm i -D playwright-core)');
+        console.error('usage: vibetesting-agent browse <url> [--pages N] [--timeout ms] [--json] [--quiet]  (needs: npm i -D playwright-core)');
         process.exit(2);
         return;
     }
@@ -211,7 +219,7 @@ async function runBrowse() {
     }
     else {
         const quiet = flag('--quiet');
-        console.log(`\n🖥️  anal-probe browse — functional check of ${url}\n`);
+        console.log(`\n🖥️  vibetesting-agent browse — functional check of ${url}\n`);
         for (const fnd of findings) {
             if (quiet && fnd.pass)
                 continue;
@@ -229,7 +237,7 @@ async function runCve() {
     const product = process.argv[3];
     const version = process.argv[4];
     if (!product || product.startsWith('-')) {
-        console.error('usage: anal-probe cve <product> [version]   e.g. anal-probe cve OpenSSH 7.4');
+        console.error('usage: vibetesting-agent cve <product> [version]   e.g. vibetesting-agent cve OpenSSH 7.4');
         process.exit(2);
         return;
     }
@@ -251,7 +259,7 @@ async function runCve() {
 async function runSeparation() {
     const configPath = process.argv[3];
     if (!configPath || configPath.startsWith('-')) {
-        console.error('usage: anal-probe separation <config.json>   (needs: npm i -D playwright-core, + two logged-in Chrome profiles)\n       config: { origin, tenantParam, chromeProfilesDir, appPaths, owner{label,chromeProfile,tenant}, attacker{...}, endpoints[{name,match}] }');
+        console.error('usage: vibetesting-agent separation <config.json>   (needs: npm i -D playwright-core, + two logged-in Chrome profiles)\n       config: { origin, tenantParam, chromeProfilesDir, appPaths, owner{label,chromeProfile,tenant}, attacker{...}, endpoints[{name,match}] }');
         process.exit(2);
         return;
     }
@@ -296,7 +304,7 @@ async function runSeparation() {
 async function runCrawl() {
     const target = process.argv[3];
     if (!target || target.startsWith('-')) {
-        console.error('usage: anal-probe crawl <url> [--profile "Profile 3"] [--cookie "<raw>"] [--pages 30] [--report f.html] [--pdf f.pdf]\n       (needs: npm i -D playwright-core; --profile reuses a logged-in Chrome profile. SAFE: GET-only, never submits create/edit/delete.)');
+        console.error('usage: vibetesting-agent crawl <url> [--profile "Profile 3"] [--cookie "<raw>"] [--pages 30] [--report f.html] [--pdf f.pdf]\n       (needs: npm i -D playwright-core; --profile reuses a logged-in Chrome profile. SAFE: GET-only, never submits create/edit/delete.)');
         process.exit(2);
         return;
     }
@@ -339,7 +347,7 @@ async function runCrawl() {
         console.log(JSON.stringify({ url, pagesVisited: pages, summary: sum, findings }, null, 2));
     }
     else {
-        console.log(`\n🕷️  anal-probe crawl — ${pages.length} page(s) of ${url}\n`);
+        console.log(`\n🕷️  vibetesting-agent crawl — ${pages.length} page(s) of ${url}\n`);
         for (const fn of findings.filter((x) => !x.pass)) {
             console.log(`  ${SEV_ICON[fn.severity]} [${fn.category}] ${fn.title}`);
             console.log(`        ${fn.detail}`);
@@ -351,6 +359,62 @@ async function runCrawl() {
         console.log(`\n  pages: ${pages.join(', ') || '(none reached — session may be stale)'}\n`);
     }
     process.exit(findings.some((fn) => !fn.pass && fn.severity === 'high') ? 1 : 0);
+}
+async function runInit() {
+    const rawUrl = process.argv[3];
+    if (!rawUrl || rawUrl.startsWith('-')) {
+        console.error('usage: vibetesting-agent init <url> [--name <project>] [--cwd <dir>] [--force]');
+        process.exit(2);
+    }
+    const url = normalizeUrl(rawUrl);
+    const cwd = arg('--cwd') || process.cwd();
+    const name = arg('--name');
+    console.error(`🔬 init: scanning ${url} …`);
+    let findings = [];
+    try {
+        findings = await probe(url, { timeoutMs: 15_000, maxCrawl: 15 });
+    }
+    catch (e) {
+        console.error(`scan failed (scaffolding empty templates): ${String(e?.message || e)}`);
+    }
+    const result = initRepo({
+        cwd,
+        url,
+        projectName: name,
+        findings,
+        force: flag('--force'),
+    });
+    for (const p of result.written)
+        console.log(`  wrote ${p}`);
+    for (const p of result.skipped)
+        console.log(`  skip  ${p} (exists; use --force)`);
+    console.log(`\nNext: open security-review.md · wire CI · re-run after deploys with:`);
+    console.log(`  npx github:newsengine/vibetesting-agent review ${url}`);
+    process.exit(0);
+}
+/** /security-review workflow: full scan + agent markdown + gherkin feature. */
+async function runReview() {
+    // Rewrite argv so main scan path sees: <url> --agent-report … --gherkin …
+    const rest = process.argv.slice(3);
+    const rawUrl = rest.find((a) => a && !a.startsWith('-'));
+    if (!rawUrl) {
+        console.error('usage: vibetesting-agent review <url> [--name <project>] [--fail-on high|medium|any] [same flags as scan]');
+        process.exit(2);
+    }
+    const name = arg('--name');
+    const agentOut = arg('--agent-report') || 'security-review.md';
+    const gherkinOut = arg('--gherkin') || 'features/security/hygiene.feature';
+    // Inject defaults if user didn't pass them
+    if (!arg('--agent-report'))
+        process.argv.push('--agent-report', agentOut);
+    if (!arg('--gherkin'))
+        process.argv.push('--gherkin', gherkinOut);
+    if (name && !process.argv.includes('--project-name'))
+        process.argv.push('--project-name', name);
+    // Drop the "review" token so position 2 is the URL
+    process.argv.splice(2, 1);
+    // fall through — caller invokes main body via re-entry
+    return mainScan();
 }
 async function main() {
     if (process.argv[2] === 'audit')
@@ -365,6 +429,13 @@ async function main() {
         return runSeparation();
     if (process.argv[2] === 'crawl')
         return runCrawl();
+    if (process.argv[2] === 'init')
+        return runInit();
+    if (process.argv[2] === 'review')
+        return runReview();
+    return mainScan();
+}
+async function mainScan() {
     const cfgResult = loadConfig(arg('--config'));
     if (cfgResult.error) {
         console.error(cfgResult.error);
@@ -373,7 +444,7 @@ async function main() {
     const config = cfgResult.config;
     const rawUrl = process.argv[2];
     if (!rawUrl || rawUrl.startsWith('-')) {
-        console.error('usage:\n  npx github:newsengine/anal-probe <url> [--only ...] [--skip ...] [--cors-path <p>] [--rate-limit-path <p>] [--timeout <ms>] [--cookie "<raw cookie>"] [--header "K: V"] [--crawl <N>] [--urls <file>] [--config <file>] [--fail-on high|medium|any] [--compliance] [--report <file.html>] [--pdf <file.pdf>] [--json] [--quiet]\n  npx github:newsengine/anal-probe audit [--prod] [--level low|moderate|high|critical] [--json]');
+        console.error('usage:\n  npx github:newsengine/vibetesting-agent <url> [--agent-report security-review.md] [--gherkin features/security/hygiene.feature] [--only ...] [--fail-on high|medium|any] [--report f.html] [--json]\n  npx github:newsengine/vibetesting-agent review <url>     # security-review: scan + agent report + gherkin\n  npx github:newsengine/vibetesting-agent init <url>       # scaffold suite into a new repo\n  npx github:newsengine/vibetesting-agent audit [--prod] [--level high]');
         process.exit(2);
     }
     const url = normalizeUrl(rawUrl); // accept bare domains (example.com -> https://example.com)
@@ -481,6 +552,29 @@ async function main() {
             }
         }
     }
+    // --agent-report <file.md>: ranked P1/P2 Claude/Cursor security-review artifact
+    const agentReportPath = arg('--agent-report');
+    if (agentReportPath) {
+        const md = renderAgentReport(findings, {
+            url,
+            projectName: arg('--project-name') || arg('--name'),
+        });
+        mkdirSync(dirname(agentReportPath), { recursive: true });
+        writeFileSync(agentReportPath, md);
+        console.error(`📝 wrote agent security review → ${agentReportPath}`);
+    }
+    // --gherkin <file.feature>: BDD scenarios for each finding (new-repo security suite)
+    const gherkinPath = arg('--gherkin');
+    if (gherkinPath) {
+        const feature = renderGherkinFeature(findings, {
+            url,
+            projectName: arg('--project-name') || arg('--name'),
+            tags: true,
+        });
+        mkdirSync(dirname(gherkinPath), { recursive: true });
+        writeFileSync(gherkinPath, feature);
+        console.error(`🥒 wrote Gherkin feature → ${gherkinPath}`);
+    }
     // --write-baseline: snapshot today's failing findings and exit 0 (nothing to gate on the first run).
     const writeBaselinePath = arg('--write-baseline');
     if (writeBaselinePath) {
@@ -516,7 +610,7 @@ async function main() {
     }
     else {
         // --quiet: show only failures (good for CI logs); default shows passes too so a clean scan is visible.
-        console.log(`\n🔬 anal-probe — full app scan of ${url}${hasAuth ? ' (authenticated)' : ''}\n`);
+        console.log(`\n🔬 vibetesting-agent — full app scan of ${url}${hasAuth ? ' (authenticated)' : ''}\n`);
         for (const cat of ALL_CATEGORIES) {
             const group = findings.filter((f) => f.category === cat);
             if (!group.length)

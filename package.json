@@ -1,9 +1,11 @@
 {
-  "name": "@newsengine/anal-probe",
+  "name": "@newsengine/vibetesting-agent",
   "version": "0.6.0",
-  "description": "Point it at any deployed app and it finds what's wrong: leaked API keys in your JS bundle, exposed .env/.git/config, broken links, missing security headers, SEO/accessibility/performance gaps — all black-box from a URL, zero install. Plus white-box multi-tenant/IDOR test helpers. Drop into any repo.",
+  "description": "Point it at any deployed app and it finds what's wrong: leaked API keys in your JS bundle, exposed .env/.git/config, broken links, missing security headers, SEO/accessibility/performance gaps — all black-box from a URL, zero install. Plus white-box multi-tenant/IDOR test helpers. Drop into any repo. Powered by VibeTesting Agent.",
   "type": "module",
   "bin": {
+    "vibetesting-agent": "dist/cli.js",
+    "vta": "dist/cli.js",
     "anal-probe": "dist/cli.js",
     "security-kit": "dist/cli.js"
   },
@@ -19,7 +21,8 @@
     "update-vuln-db": "node scripts/update-vuln-db.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "npm run build && node --experimental-strip-types --test tests/*.test.ts",
+    "test": "npm run build && node --experimental-strip-types --test 'tests/**/*.test.ts'",
+    "test:fixtures": "npm run build && node --experimental-strip-types --test tests/fixture-coverage.test.ts",
     "prepublishOnly": "npm run build",
     "prepare": "npm run build"
   },
@@ -30,6 +33,7 @@
     "security",
     "scanner",
     "saas",
+    "vibetesting-agent",
     "vibe-coding",
     "secrets-detection",
     "owasp",
@@ -46,12 +50,12 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/newsengine/anal-probe.git"
+    "url": "git+https://github.com/newsengine/vibetesting-agent.git"
   },
   "bugs": {
-    "url": "https://github.com/newsengine/anal-probe/issues"
+    "url": "https://github.com/newsengine/vibetesting-agent/issues"
   },
-  "homepage": "https://github.com/newsengine/anal-probe#readme",
+  "homepage": "https://vibetestingagent.com",
   "devDependencies": {
     "@eslint/js": "^9.39.5",
     "@types/node": "^20.0.0",

@@ -32,7 +32,7 @@ export function defaultProfilesDir(): string {
 /** Build a minimal throwaway user-data-dir seeded with just one source profile's cookies. */
 export function seedProfile(profilesDir: string, srcProfile: string, tag: string): string {
   // Unique per-process dir so we never collide with a leftover dir a zombie Chrome still holds.
-  const tmp = path.join(os.tmpdir(), `anal-probe-auth-${tag}-${process.pid}`);
+  const tmp = path.join(os.tmpdir(), `vibetesting-agent-auth-${tag}-${process.pid}`);
   try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* best-effort */ }
   fs.mkdirSync(path.join(tmp, 'Default', 'Network'), { recursive: true });
   const srcDir = path.join(expand(profilesDir), srcProfile);

@@ -1,17 +1,17 @@
 # Standards & compliance mapping
 
-anal-probe maps its checks to recognized standards so a scan doubles as a conformance check. Run any
+vibetesting-agent maps its checks to recognized standards so a scan doubles as a conformance check. Run any
 scan with `--compliance` for a live report (ASVS L1 coverage, OWASP Top 10 + API Top 10, CWE list, and
 A+–F security/TLS scorecards):
 
 ```bash
-anal-probe https://your-app.example.com --compliance          # human report
-anal-probe https://your-app.example.com --compliance --json    # findings tagged with standards + coverage block
+vibetesting-agent https://your-app.example.com --compliance          # human report
+vibetesting-agent https://your-app.example.com --compliance --json    # findings tagged with standards + coverage block
 ```
 
 ## Standards coverage at a glance — what we DO and DON'T test
 
-anal-probe is a **safe-to-run black-box** scanner: a URL in, no source, no authentication required, no
+vibetesting-agent is a **safe-to-run black-box** scanner: a URL in, no source, no authentication required, no
 attack payloads. That boundary decides what we can honestly test. Everything below is deliberate.
 
 | Standard / checklist | Status | Notes |
@@ -42,14 +42,14 @@ attack payloads. That boundary decides what we can honestly test. Everything bel
 **The rule:** we test everything verifiable black-box without sending attack payloads or needing an
 account. The ⛔ items require active exploitation, authenticated flows, source review, or system access —
 that's ZAP / Burp / manual-pentest / SCA-at-build-time territory, and claiming to "test" them would be
-dishonest. For those, anal-probe tells you where its coverage ends.
+dishonest. For those, vibetesting-agent tells you where its coverage ends.
 
 ## OWASP ASVS 4.0.3 — Level 1, black-box-testable subset
 
 ASVS L1 has 25 requirements that are verifiable purely black-box (no source, no auth, no active
-exploitation). anal-probe covers **23 of 25**; the two gaps are noted honestly.
+exploitation). vibetesting-agent covers **23 of 25**; the two gaps are noted honestly.
 
-| ASVS | Requirement | anal-probe check |
+| ASVS | Requirement | vibetesting-agent check |
 |------|-------------|------------------|
 | V3.4.1 | Session cookies `Secure` | `cookie.*` |
 | V3.4.2 | Session cookies `HttpOnly` | `cookie.*` |

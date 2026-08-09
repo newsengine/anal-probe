@@ -394,7 +394,7 @@ export async function exposureChecks(ctx) {
         }
     }
     // Verbose error / stack-trace leak on an unknown path.
-    const probe404 = await safeFetch(ctx.origin + '/__anal_probe_does_not_exist__', { redirect: 'follow', headers: ctx.opts.extraHeaders });
+    const probe404 = await safeFetch(ctx.origin + '/__vibetesting_agent_does_not_exist__', { redirect: 'follow', headers: ctx.opts.extraHeaders });
     if (probe404) {
         const body = (await probe404.text()).slice(0, 8000);
         const leak = /\bat\s+[\w$.]+\s+\(.*:\d+:\d+\)|Traceback \(most recent call last\)|node_modules\/|\/var\/task\/|ECONNREFUSED|Sequelize\w+Error|PG::|psql:/.test(body);

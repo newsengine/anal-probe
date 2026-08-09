@@ -55,7 +55,7 @@ const CHECKS = {
     ]),
     Django: async (ctx) => {
         // DEBUG=True renders a detailed error page on an unknown route (leaks settings, paths, SQL).
-        const res = await safeFetch(ctx.origin + '/__anal_probe_django_debug__', { redirect: 'follow' });
+        const res = await safeFetch(ctx.origin + '/__vibetesting_agent_django_debug__', { redirect: 'follow' });
         const out = [];
         if (res) {
             const body = (await res.text()).slice(0, 8000);
