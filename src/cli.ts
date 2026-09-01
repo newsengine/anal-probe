@@ -62,6 +62,7 @@ const CAT_TITLE: Record<Category, string> = {
   framework: '🧩 Framework-specific',
   components: '📦 Vulnerable components',
   host: '🖥️  Host & infrastructure',
+  appstyle: '🏢 App-type rules',
   plugins: '🔌 Custom plugins',
 };
 

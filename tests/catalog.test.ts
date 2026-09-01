@@ -24,7 +24,7 @@ const CHECKS_MD = join(__dirname, '..', 'docs', 'CHECKS.md');
 // Offline-safe categories (dns/host need real network/DNS and are excluded here).
 const OFFLINE_CATEGORIES = [
   'security', 'secrets', 'exposure', 'reliability', 'seo', 'a11y', 'performance',
-  'components', 'agent', 'framework', 'plugins',
+  'components', 'agent', 'framework', 'appstyle', 'plugins',
 ] as const;
 
 async function collectIds(url: string): Promise<Finding[]> {

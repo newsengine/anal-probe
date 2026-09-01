@@ -18,6 +18,7 @@ export type Category =
   | 'framework'    // stack-specific misconfigs (Next.js/WordPress/Laravel/Django/Rails/Spring/ASP.NET)
   | 'components'   // OWASP A06: vulnerable/outdated client-side JS libraries (retire.js-style)
   | 'host'         // passive infra intel: resolved IP(s), reverse DNS, CDN/hosting provider (no scanning)
+  | 'appstyle'     // business-archetype rules: detects the app TYPE and runs that type's extra checks
   | 'plugins';     // user-supplied JSON templates (Nuclei-style declarative checks) run by src/plugins.ts
 
 export interface Finding {

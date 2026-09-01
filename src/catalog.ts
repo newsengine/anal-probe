@@ -7,6 +7,7 @@
 
 import type { Category, Severity } from './types.js';
 import { refsFor } from './compliance.js';
+import { appStyleRuleSpecs } from './appstyle.js';
 
 /**
  * How a check reaches its verdict — this is what "not just a black box" means in practice: every check
@@ -164,6 +165,10 @@ export const CATALOG: CheckSpec[] = [
   { id: 'host.cdn', category: 'host', title: 'CDN / edge', severity: 'info', cls: 'passive', since: '0.6.0', description: 'The CDN/edge fronting the origin.' },
   { id: 'host.exposed', category: 'host', title: 'Origin exposure', severity: 'low', cls: 'probe', since: '0.6.0', description: 'Whether the origin IP appears reachable behind the CDN.' },
 
+  // ── appstyle: business-archetype detection (per-type rules are appended below from appstyle.ts) ──
+  { id: 'appstyle.detected', category: 'appstyle', title: 'App type detected', severity: 'info', cls: 'passive', since: '0.7.0', description: 'The business archetype(s) the homepage was fingerprinted as (drives which type-specific rules run).' },
+  { id: 'appstyle.none', category: 'appstyle', title: 'App type not identified', severity: 'info', cls: 'passive', since: '0.7.0', description: 'No archetype reached the confidence threshold — no type-specific rules ran.' },
+
   // ── plugins (user-supplied declarative templates) ──────────────────────────────────────────────
   { id: 'plugins', category: 'plugins', title: 'Plugins base', severity: 'info', cls: 'probe', since: '0.5.0', description: 'Base finding for user JSON plugin templates.' },
   { id: 'plugins.none', category: 'plugins', title: 'No plugin templates', severity: 'info', cls: 'probe', since: '0.5.0', description: 'No custom templates were loaded.' },
@@ -176,6 +181,15 @@ export const CATALOG: CheckSpec[] = [
   { id: 'testkit.massAssignmentProbe', category: 'testkit', title: 'Mass-assignment probe', severity: 'high', cls: 'white-box', since: '0.6.0', description: 'Detects privileged fields accepted from an untrusted body.' },
   { id: 'testkit.findSensitiveFields', category: 'testkit', title: 'Sensitive-field scan', severity: 'medium', cls: 'white-box', since: '0.6.0', description: 'Flags PII/secret-looking fields leaking in API responses.' },
 ];
+
+// Append every top-20 app-type rule from appstyle.ts so the catalog (and docs/CHECKS.md) lists them all
+// without a second copy to maintain. Each rule only runs when its archetype is confidently detected.
+for (const spec of appStyleRuleSpecs()) {
+  CATALOG.push({
+    id: spec.id, category: 'appstyle', title: spec.title, severity: spec.severity, cls: 'probe', since: '0.7.0',
+    description: `[${spec.label}] ${spec.description}`,
+  });
+}
 
 /** Exact-match first, then the longest `dynamic` family prefix the id starts with. */
 export function catalogEntryFor(id: string): CheckSpec | undefined {
@@ -218,13 +232,13 @@ export function renderCatalogMarkdown(): string {
 
   const order: (Category | 'testkit')[] = [
     'security', 'secrets', 'exposure', 'dns', 'reliability', 'seo', 'a11y', 'performance',
-    'agent', 'framework', 'components', 'host', 'plugins', 'testkit',
+    'agent', 'framework', 'components', 'host', 'appstyle', 'plugins', 'testkit',
   ];
   const CAT_TITLE: Record<Category | 'testkit', string> = {
     security: 'Security', secrets: 'Leaked secrets', exposure: 'Exposed files & debug', dns: 'DNS & email',
     reliability: 'Reliability', seo: 'SEO', a11y: 'Accessibility', performance: 'Performance', agent: 'Agent readiness',
     framework: 'Framework-specific', components: 'Vulnerable components', host: 'Host & infrastructure',
-    plugins: 'Custom plugins', testkit: 'White-box testkit helpers',
+    appstyle: 'App-type rules (top-20 business archetypes)', plugins: 'Custom plugins', testkit: 'White-box testkit helpers',
   };
 
   for (const cat of order) {

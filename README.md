@@ -44,7 +44,10 @@ npx github:newsengine/vibetesting-agent init https://your-app.example.com --name
 Built for vibe coders shipping with AI: you don't need to know what to look for — the scanner does, and
 every failing finding comes with a one-line **fix**. Exits non-zero so it doubles as a CI gate.
 
-- **Full black-box scan** — 13 categories (below), all from a URL.
+- **Full black-box scan** — 14 categories (below), all from a URL.
+- **App-type aware**: fingerprints the *business archetype* (e-commerce, SaaS, auth portal, fintech,
+  healthcare, marketplace, docs, job board, …20 in all) and runs that type's extra rules — only when
+  confidently detected. See the `appstyle` rows in [`docs/CHECKS.md`](docs/CHECKS.md).
 - **Every check is catalogued** — [`docs/CHECKS.md`](docs/CHECKS.md) is a generated, always-current list
   of every test the scanner runs (id, category, severity, standards, and whether it's passive / an extra
   GET / an active probe / needs auth). The build fails if a check isn't listed, so coverage is never a

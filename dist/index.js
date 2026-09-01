@@ -21,3 +21,4 @@ export { renderGherkinFeature, renderGherkinFiles, renderGherkinStepStub, } from
 export { initRepo, } from './init.js';
 export { apiExposureFindings, apiSecurityFindings, reflectedXssFindings, discoverApiRoutes, } from './api.js';
 export { CATALOG, catalogEntryFor, scannerSpecs, renderCatalogMarkdown, } from './catalog.js';
+export { appStyleChecks, detectAppStyles, appStyleRuleSpecs, APP_STYLE_KEYS, } from './appstyle.js';

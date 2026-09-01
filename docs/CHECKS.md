@@ -3,7 +3,7 @@
 > Generated from `src/catalog.ts` by `npm run catalog`. Do not edit by hand — edit the catalog and regenerate.
 > `tests/catalog.test.ts` fails the build if the engine emits a finding id that is not listed here, or if this file is stale.
 
-**90** scanner checks + **5** white-box testkit helpers.
+**135** scanner checks + **5** white-box testkit helpers.
 
 Legend — how each check reaches its verdict:
 
@@ -159,6 +159,56 @@ Legend — how each check reaches its verdict:
 | `host.provider` | Hosting provider | info | probe | on | — | 0.6.0 | The hosting/cloud provider inferred from IP/headers. |
 | `host.cdn` | CDN / edge | info | passive | on | — | 0.6.0 | The CDN/edge fronting the origin. |
 | `host.exposed` | Origin exposure | low | probe | on | — | 0.6.0 | Whether the origin IP appears reachable behind the CDN. |
+
+## App-type rules (top-20 business archetypes)
+
+| Check ID | Title | Severity | Class | Default | Standards | Since | What it detects |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `appstyle.detected` | App type detected | info | passive | on | — | 0.7.0 | The business archetype(s) the homepage was fingerprinted as (drives which type-specific rules run). |
+| `appstyle.none` | App type not identified | info | passive | on | — | 0.7.0 | No archetype reached the confidence threshold — no type-specific rules ran. |
+| `appstyle.ecommerce.csp` | Store has a CSP (card-skimmer defense) | high | probe | on | — | 0.7.0 | [E-commerce / online store] A store without a Content-Security-Policy is the prime Magecart target — injected JS can skim card fields. |
+| `appstyle.ecommerce.hsts` | Store enforces HSTS on payment traffic | high | probe | on | — | 0.7.0 | [E-commerce / online store] Payment pages must never be downgradable to http. |
+| `appstyle.ecommerce.third-party-scripts` | Third-party scripts on the store are pinned (SRI) | medium | probe | on | — | 0.7.0 | [E-commerce / online store] Every un-pinned third-party script on a store is a potential skimmer injection point. |
+| `appstyle.saas.frame-protection` | App is protected from clickjacking | medium | probe | on | — | 0.7.0 | [SaaS app / dashboard] An authenticated app framed by an attacker enables clickjacking of privileged actions. |
+| `appstyle.saas.csp` | App ships a CSP | medium | probe | on | — | 0.7.0 | [SaaS app / dashboard] A dashboard handling user data should constrain script sources. |
+| `appstyle.marketing.open-graph` | Landing page has Open Graph tags | low | probe | on | — | 0.7.0 | [Marketing / landing site] Marketing links that don't unfurl with a title/image lose clicks when shared. |
+| `appstyle.marketing.compression` | Landing page is compressed | low | probe | on | — | 0.7.0 | [Marketing / landing site] Conversion drops with load time; an uncompressed landing page is an easy win. |
+| `appstyle.blog.feed` | Blog exposes an RSS/Atom feed | low | probe | on | — | 0.7.0 | [Blog / news / CMS] A content site without a feed loses syndication and reader tooling. |
+| `appstyle.blog.article-schema` | Articles carry JSON-LD schema | low | probe | on | — | 0.7.0 | [Blog / news / CMS] Article structured data drives rich results in search. |
+| `appstyle.auth.https` | Login is served over HTTPS | high | probe | on | — | 0.7.0 | [Auth / login / identity portal] Credentials entered on an http page are sent in clear text. |
+| `appstyle.auth.no-cache` | Login page is not cached | medium | probe | on | — | 0.7.0 | [Auth / login / identity portal] A cached login/identity page can leak on shared machines and proxies. |
+| `appstyle.auth.form-secure` | Login form posts to an https target | high | probe | on | — | 0.7.0 | [Auth / login / identity portal] A login <form> whose action is http (or method GET) leaks credentials. |
+| `appstyle.api.docs-public` | API docs/spec are not wide open | medium | probe | on | — | 0.7.0 | [Headless API / JSON service] A public OpenAPI/Swagger spec hands attackers your full endpoint map. |
+| `appstyle.api.json-errors` | API returns JSON errors, not HTML stack traces | medium | probe | on | — | 0.7.0 | [Headless API / JSON service] An API that returns an HTML error page for a bad path is likely leaking a framework debug page. |
+| `appstyle.marketplace.frame-protection` | Marketplace is protected from clickjacking | medium | probe | on | — | 0.7.0 | [Multi-vendor marketplace] Purchase/checkout actions on a marketplace must not be framable. |
+| `appstyle.marketplace.csp` | Marketplace ships a CSP | medium | probe | on | — | 0.7.0 | [Multi-vendor marketplace] User-generated listings raise XSS risk; a CSP limits the blast radius. |
+| `appstyle.booking.https` | Booking flow is served over HTTPS | high | probe | on | — | 0.7.0 | [Booking / scheduling / reservations] Booking captures names, contact details and often payment — it must be https. |
+| `appstyle.booking.csp` | Booking app ships a CSP | medium | probe | on | — | 0.7.0 | [Booking / scheduling / reservations] Payment + PII collection warrants a CSP. |
+| `appstyle.fintech.hsts` | Fintech enforces HSTS | high | probe | on | — | 0.7.0 | [Fintech / banking / payments] Financial apps must never be downgradable to http. |
+| `appstyle.fintech.csp` | Fintech ships a strict CSP | high | probe | on | — | 0.7.0 | [Fintech / banking / payments] Money-movement UIs are high-value XSS targets. |
+| `appstyle.fintech.no-cache` | Fintech responses are non-cacheable | medium | probe | on | — | 0.7.0 | [Fintech / banking / payments] Account/balance data must not be cached by shared proxies or browsers. |
+| `appstyle.healthcare.https` | Health portal is HTTPS-only | high | probe | on | — | 0.7.0 | [Healthcare / patient portal] PHI must only ever travel over TLS. |
+| `appstyle.healthcare.no-cache` | Health portal is non-cacheable | medium | probe | on | — | 0.7.0 | [Healthcare / patient portal] PHI must not linger in browser or proxy caches. |
+| `appstyle.social.csp` | Community app ships a CSP | medium | probe | on | — | 0.7.0 | [Social network / community / forum] User posts/comments make stored XSS the top risk for social apps. |
+| `appstyle.social.frame-protection` | Community app resists clickjacking | medium | probe | on | — | 0.7.0 | [Social network / community / forum] Framing enables like/follow/post clickjacking. |
+| `appstyle.chat.csp` | Chat app ships a CSP | medium | probe | on | — | 0.7.0 | [Chat / messaging app] Messages are attacker-controlled content rendered to other users — stored XSS risk. |
+| `appstyle.chat.frame-protection` | Chat app resists clickjacking | low | probe | on | — | 0.7.0 | [Chat / messaging app] A framed chat UI can be tricked into sending/approving. |
+| `appstyle.files.nosniff` | File app sends X-Content-Type-Options: nosniff | medium | probe | on | — | 0.7.0 | [File storage / sharing] Without nosniff, an uploaded file can be sniffed and executed as HTML/script. |
+| `appstyle.files.csp` | File app ships a CSP | medium | probe | on | — | 0.7.0 | [File storage / sharing] A CSP (esp. sandbox / object-src) limits what an uploaded/served file can do. |
+| `appstyle.admin.noindex` | Admin panel is not search-indexable | low | probe | on | — | 0.7.0 | [Admin / back-office panel] An admin panel showing up in search advertises the attack surface. |
+| `appstyle.admin.frame-protection` | Admin panel resists clickjacking | medium | probe | on | — | 0.7.0 | [Admin / back-office panel] Admin actions are the highest-value clickjacking target. |
+| `appstyle.docs.canonical` | Docs pages set a canonical URL | low | probe | on | — | 0.7.0 | [Documentation / knowledge base] Versioned/duplicated docs need canonicals to avoid SEO cannibalization. |
+| `appstyle.docs.search` | Docs site has search | low | probe | on | — | 0.7.0 | [Documentation / knowledge base] Docs without search are hard to use at any size. |
+| `appstyle.jobs.schema` | Job posts carry JobPosting schema | low | probe | on | — | 0.7.0 | [Job board / recruitment] JobPosting structured data is required for Google Jobs inclusion. |
+| `appstyle.jobs.apply-https` | Job board is served over HTTPS | medium | probe | on | — | 0.7.0 | [Job board / recruitment] Applications carry résumés and personal data. |
+| `appstyle.realestate.schema` | Listings carry structured data | low | probe | on | — | 0.7.0 | [Real estate / property listings] Property structured data drives rich real-estate search results. |
+| `appstyle.realestate.og` | Listings unfurl when shared | low | probe | on | — | 0.7.0 | [Real estate / property listings] Property links are shared constantly — they should preview. |
+| `appstyle.lms.csp` | LMS ships a CSP | medium | probe | on | — | 0.7.0 | [Education / LMS / courses] LMS platforms host user/instructor content and often minors' data. |
+| `appstyle.lms.https` | LMS is served over HTTPS | medium | probe | on | — | 0.7.0 | [Education / LMS / courses] Student records and (often) minors' data require TLS. |
+| `appstyle.crm.frame-protection` | CRM resists clickjacking | medium | probe | on | — | 0.7.0 | [CRM / sales tool] A framed CRM enables clickjacking of record edits/exports. |
+| `appstyle.crm.no-cache` | CRM responses are non-cacheable | medium | probe | on | — | 0.7.0 | [CRM / sales tool] Customer records must not be cached by shared proxies. |
+| `appstyle.support.csp` | Helpdesk ships a CSP | medium | probe | on | — | 0.7.0 | [Support / helpdesk / ticketing] Ticket bodies are attacker-controlled content shown to agents — stored XSS risk. |
+| `appstyle.support.frame-protection` | Helpdesk resists clickjacking | low | probe | on | — | 0.7.0 | [Support / helpdesk / ticketing] A framed agent console can be clickjacked into actions. |
 
 ## Custom plugins
 

@@ -14,6 +14,7 @@ import { componentChecks } from './components.js';
 import { detectStacks } from './detect.js';
 import { hostChecks } from './host.js';
 import { pluginChecks } from './plugins.js';
+import { appStyleChecks } from './appstyle.js';
 
 export type { Category, Finding, ScanContext, ScanOptions, Severity };
 // Back-compat alias: ProbeOptions was the old name.
@@ -32,6 +33,7 @@ const RUNNERS: Record<Category, (ctx: ScanContext) => Promise<Finding[]>> = {
   framework: frameworkChecks,
   components: componentChecks,
   host: hostChecks,
+  appstyle: appStyleChecks,
   plugins: pluginChecks,
 };
 

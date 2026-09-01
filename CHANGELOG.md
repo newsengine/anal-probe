@@ -7,6 +7,16 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **`appstyle` category — app-type-aware rules for the top 20 business archetypes:** the scanner now
+  fingerprints *what kind of app* it is from the homepage (e-commerce, SaaS dashboard, marketing site,
+  blog/CMS, auth portal, headless API, marketplace, booking, fintech, healthcare, social/community,
+  chat, file-sharing, admin panel, docs site, job board, real estate, LMS, CRM, helpdesk) and runs that
+  type's extra rules — a store is checked for a card-skimmer CSP + payment HSTS + pinned third-party
+  scripts, an auth portal for HTTPS + no-cache + a secure login form, fintech/healthcare for HSTS +
+  no-store, and so on. Rules run **only** for a confidently-detected type (top match, or another type
+  backed by a strong distinctive signal), mirroring the framework-detection discipline so a store's
+  "Careers" link never gets job-board page rules. Detection is homepage-only (no extra requests); every
+  rule is listed in `docs/CHECKS.md`.
 - **Check catalog — a maintained list of every test (`docs/CHECKS.md`):** `src/catalog.ts` is now the
   single source of truth for every check the scanner runs. Each entry declares its id, category,
   severity, standards refs, the version it shipped in, and — so the tool is no longer a black box about
