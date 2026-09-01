@@ -8,7 +8,20 @@ import { hostHeaderChecks } from './hostheader.js';
 import { csrfFindings } from './csrf.js';
 import { domXssFindings } from './domxss.js';
 import { jsonLdFindings } from './jsonld.js';
+import { apiExposureFindings, apiSecurityFindings } from './api.js';
 const f = (category, id, title, severity, pass, detail, fix) => ({ category, id, title, severity, pass, detail, fix });
+// Set-Cookie headers, preferring the structured getSetCookie() API and falling back to the raw folded
+// header on older runtimes. The fallback splits on the comma that precedes a new "name=" pair, so an
+// Expires date's own comma doesn't split a cookie in two.
+function getSetCookieHeaders(h) {
+    const structured = h.getSetCookie?.();
+    if (structured?.length)
+        return structured;
+    const raw = h.get('set-cookie');
+    if (!raw)
+        return [];
+    return raw.split(/,(?=\s*[A-Za-z0-9!#$%&'*+.^_`|~-]+=)/).map((c) => c.trim()).filter(Boolean);
+}
 // Parse a CSP header into a directive→sources map (lowercased directive names).
 function parseCsp(policy) {
     const map = new Map();
@@ -143,9 +156,10 @@ export async function securityChecks(ctx) {
     }
     if (!disclosed)
         out.push(f('security', 'disclosure.none', 'No version banners disclosed', 'info', true, 'no numeric Server/X-Powered-By version'));
-    // Cookie flags
-    const setCookie = h.getSetCookie?.();
-    if (setCookie?.length) {
+    // Cookie flags. Prefer getSetCookie() (Node 20+); fall back to the raw header so the check never
+    // silently no-ops on an older undici that only folds set-cookie into one value.
+    const setCookie = getSetCookieHeaders(h);
+    if (setCookie.length) {
         for (const c of setCookie) {
             const name = c.split('=')[0];
             const secure = /;\s*secure/i.test(c);
@@ -153,6 +167,9 @@ export async function securityChecks(ctx) {
             const sameSite = /;\s*samesite=/i.test(c);
             const ok = secure && httpOnly && sameSite;
             out.push(f('security', `cookie.${name}`, `Cookie ${name} flags`, 'medium', ok, `Secure=${secure} HttpOnly=${httpOnly} SameSite=${sameSite}`, 'Set Secure + HttpOnly + SameSite on session cookies so they can\'t be stolen by scripts or sent cross-site.'));
+            // Split-out (#24): a missing Secure flag is its own always-on finding — without it the cookie can
+            // ride any downgraded/mixed request regardless of HttpOnly/SameSite.
+            out.push(f('security', `cookie-secure.${name}`, `Cookie ${name} Secure flag`, 'medium', secure, secure ? 'Secure is set' : 'no Secure attribute — the cookie can be sent over a downgraded/mixed request', secure ? undefined : `Add the Secure attribute to the ${name} cookie so it is only ever sent over https.`));
             // Defense-in-depth: a session-ish cookie ideally carries a __Host-/__Secure- prefix.
             const prefixed = name.startsWith('__Host-') || name.startsWith('__Secure-');
             out.push(f('security', `cookie-prefix.${name}`, `Cookie ${name} prefix`, 'info', prefixed, prefixed ? 'uses __Host-/__Secure- prefix' : 'consider a __Host- prefix for session cookies', prefixed ? undefined : 'Rename session cookies to __Host-<name> so the browser pins them to your origin + https.'));
@@ -245,6 +262,8 @@ export async function securityChecks(ctx) {
     out.push(...domXssFindings(ctx));
     // JSON-LD script-breakout: structured-data blocks that don't escape </script> (stored XSS).
     out.push(...jsonLdFindings(ctx));
+    // API-surface security nuances (#24): CORS-on-discovered-routes (on), rate-limit scan + reflected-XSS (opt-in).
+    out.push(...await apiSecurityFindings(ctx));
     return out;
 }
 // ───────────────────────────── secrets (keys leaked to the browser) ──────────────────────────────
@@ -417,8 +436,13 @@ export async function exposureChecks(ctx) {
             }
         }
     }
+    // API-surface exposure (#24): unauthenticated data probe (on) + unauthenticated write probe (opt-in).
+    const apiFindings = await apiExposureFindings(ctx);
+    out.push(...apiFindings);
+    if (apiFindings.some((fnd) => !fnd.pass))
+        any = true;
     if (!any)
-        out.push(f('exposure', 'exposure.none', 'No exposed config/debug surfaces found', 'info', true, 'checked dotfiles, configs, error pages, GraphQL introspection'));
+        out.push(f('exposure', 'exposure.none', 'No exposed config/debug surfaces found', 'info', true, 'checked dotfiles, configs, error pages, GraphQL introspection, unauthenticated API routes'));
     return out;
 }
 // ───────────────────────────── reliability (broken links/images, mixed content) ──────────────────

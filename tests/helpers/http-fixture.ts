@@ -217,5 +217,10 @@ export const LEAKY_HTML = `<!DOCTYPE html>
     // High-confidence DOM XSS pattern: location -> innerHTML
     document.body.innerHTML = location.hash;
   </script>
+  <script>
+    // API routes referenced client-side (for the #24 API-surface probes to discover).
+    fetch('/api/config');
+    fetch('/api/ai/checklist');
+  </script>
 </body>
 </html>`;

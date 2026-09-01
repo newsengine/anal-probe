@@ -10,6 +10,9 @@ export interface FileConfig {
     allowReportOnlyCsp?: boolean;
     quiet?: boolean;
     pluginsDir?: string;
+    apiWrite?: boolean;
+    rateLimitScan?: boolean;
+    reflectedXss?: boolean;
 }
 /**
  * Load config from an explicit path or the default `.analproberc.json` in cwd. A missing DEFAULT file is

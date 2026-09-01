@@ -19,3 +19,5 @@ export { findingKey, buildBaseline, applyBaseline, } from './baseline.js';
 export { renderAgentReport, renderFindingPrompt, } from './agent-report.js';
 export { renderGherkinFeature, renderGherkinFiles, renderGherkinStepStub, } from './gherkin.js';
 export { initRepo, } from './init.js';
+export { apiExposureFindings, apiSecurityFindings, reflectedXssFindings, discoverApiRoutes, } from './api.js';
+export { CATALOG, catalogEntryFor, scannerSpecs, renderCatalogMarkdown, } from './catalog.js';

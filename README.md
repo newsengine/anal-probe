@@ -45,6 +45,10 @@ Built for vibe coders shipping with AI: you don't need to know what to look for 
 every failing finding comes with a one-line **fix**. Exits non-zero so it doubles as a CI gate.
 
 - **Full black-box scan** — 13 categories (below), all from a URL.
+- **Every check is catalogued** — [`docs/CHECKS.md`](docs/CHECKS.md) is a generated, always-current list
+  of every test the scanner runs (id, category, severity, standards, and whether it's passive / an extra
+  GET / an active probe / needs auth). The build fails if a check isn't listed, so coverage is never a
+  black box. Regenerate with `npm run catalog`.
 - **Framework-aware**: fingerprints the stack (Next.js/WordPress/Laravel/Django/Rails/Spring/ASP.NET) and
   runs targeted checks for its known misconfigs — only when confidently detected.
 - **Vulnerable-component detection** (OWASP A06): retire.js-style client-side JS library CVE matching,

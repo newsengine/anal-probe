@@ -7,6 +7,28 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Check catalog — a maintained list of every test (`docs/CHECKS.md`):** `src/catalog.ts` is now the
+  single source of truth for every check the scanner runs. Each entry declares its id, category,
+  severity, standards refs, the version it shipped in, and — so the tool is no longer a black box about
+  its own coverage — how it reaches its verdict (`passive` reads the homepage only, `probe` makes extra
+  safe GETs, `active` sends a crafted probe/burst/write, `authenticated` needs `--cookie/--header`,
+  `white-box` needs source/tokens/two accounts). `npm run catalog` regenerates the doc, and
+  `tests/catalog.test.ts` fails the build if the engine ever emits a finding id that isn't catalogued
+  (new check → add its entry) or if the doc drifts. Adding/upgrading checks now keeps the list current.
+- **API-surface checks (issue #24):** detections a homepage-only scan missed, all reachable black-box:
+  - `api.unauth-data` (**on by default**, GET-only) — flags an `/api/*` route (built-in wordlist +
+    routes discovered in the HTML) that answers `200` + a JSON data body with no auth challenge; graded
+    high when the body looks like records/PII.
+  - `api.cors` (**on by default**) — generalizes CORS-reflection testing to discovered API routes
+    (any-origin reflection **with** credentials).
+  - `api.unauth-write` (opt-in `--api-write`) — sends a benign no-op POST to write-suggestive routes and
+    flags any `2xx`; destructive-sounding verbs are never touched and SPA HTML shells are ignored.
+  - `api.rate-limit` (opt-in `--rate-limit-scan`) — autonomously bursts discovered expensive endpoints
+    (`ai`, `search`, `export`, …) and expects a `429`; high on compute/LLM paths (budget-DoS).
+  - `xss.reflected` (opt-in `--xss`) — injects an inert, non-executing marker into public query params
+    and flags unencoded reflection (reflected XSS / HTML injection).
+  - `cookie-secure.<name>` — the missing-`Secure`-flag check is now split into its own always-on finding,
+    with a `getSetCookie()` fallback that parses the raw header on older runtimes so it never no-ops.
 - **`plugins` category — custom JSON check templates:** point `--plugins <dir>` at a folder of JSON
   templates (request + status/header/body matchers with and/or conditions, invertible via `negative`)
   and they run as first-class findings — no code, no fork. Malformed templates are skipped (never fatal);

@@ -16,6 +16,9 @@ export interface FileConfig {
   allowReportOnlyCsp?: boolean;
   quiet?: boolean;
   pluginsDir?: string;
+  apiWrite?: boolean;
+  rateLimitScan?: boolean;
+  reflectedXss?: boolean;
 }
 
 /**

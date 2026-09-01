@@ -44,6 +44,40 @@ export async function startKnownBad(): Promise<FixtureServer> {
       return;
     }
 
+    // #24 API-surface fixtures ------------------------------------------------
+    // Unauthenticated data leak + dangerous CORS reflection (echoes any Origin with credentials).
+    if (path === '/api/config') {
+      const origin = req.headers.origin as string | undefined;
+      send(
+        res,
+        200,
+        JSON.stringify({ apiKey: 'pk_test_x', users: [{ id: 1, email: 'a@b.com' }], featureFlags: { beta: true } }),
+        {
+          'content-type': 'application/json',
+          ...(origin ? { 'access-control-allow-origin': origin, 'access-control-allow-credentials': 'true' } : {}),
+        },
+      );
+      return;
+    }
+    // Expensive LLM-ish endpoint with no throttling (for the opt-in rate-limit scan).
+    if (path === '/api/ai/checklist') {
+      send(res, 200, JSON.stringify({ items: [1, 2, 3] }), { 'content-type': 'application/json' });
+      return;
+    }
+    // Accepts an unauthenticated write (for the opt-in write probe).
+    if (path === '/api/sync' && req.method === 'POST') {
+      send(res, 200, JSON.stringify({ ok: true }), { 'content-type': 'application/json' });
+      return;
+    }
+    // Reflected input echoed unencoded into HTML (for the opt-in reflected-XSS probe).
+    const reflected = url.searchParams.get('q') || url.searchParams.get('search') || url.searchParams.get('s');
+    if (reflected) {
+      send(res, 200, `<!DOCTYPE html><html><body><h1>Results for ${reflected}</h1></body></html>`, {
+        'content-type': 'text/html',
+      });
+      return;
+    }
+
     // Directory listing for one common path
     if (path === '/uploads/' || path === '/uploads') {
       send(

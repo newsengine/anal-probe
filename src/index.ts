@@ -57,3 +57,10 @@ export {
   initRepo,
   type InitOptions, type InitResult,
 } from './init.js';
+export {
+  apiExposureFindings, apiSecurityFindings, reflectedXssFindings, discoverApiRoutes,
+} from './api.js';
+export {
+  CATALOG, catalogEntryFor, scannerSpecs, renderCatalogMarkdown,
+  type CheckSpec, type CheckClass,
+} from './catalog.js';
