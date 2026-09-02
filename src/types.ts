@@ -18,6 +18,7 @@ export type Category =
   | 'framework'    // stack-specific misconfigs (Next.js/WordPress/Laravel/Django/Rails/Spring/ASP.NET)
   | 'components'   // OWASP A06: vulnerable/outdated client-side JS libraries (retire.js-style)
   | 'host'         // passive infra intel: resolved IP(s), reverse DNS, CDN/hosting provider (no scanning)
+  | 'appstyle'     // business-archetype rules: detects the app TYPE and runs that type's extra checks
   | 'plugins';     // user-supplied JSON templates (Nuclei-style declarative checks) run by src/plugins.ts
 
 export interface Finding {
@@ -54,6 +55,15 @@ export interface ScanOptions {
    *  reach pages behind login. Never attached to the attack-probe requests (CORS/open-redirect) or any
    *  cross-origin fetch, to avoid leaking your session to a third party. */
   extraHeaders?: Record<string, string>;
+  /** Opt-in (#24): send a benign unauthenticated POST to write-suggestive API routes and flag any 2xx.
+   *  Non-destructive (no-op body, destructive verbs skipped) but off by default so the scan stays quiet. */
+  apiWrite?: boolean;
+  /** Opt-in (#24): autonomously burst discovered expensive /api/* routes (~15 requests each) and expect
+   *  a 429. Off by default — bursting is louder than a plain GET. */
+  rateLimitScan?: boolean;
+  /** Opt-in (#24): probe public query params with an inert marker and flag unencoded reflection
+   *  (reflected XSS / HTML injection). Off by default — this actively injects a (non-executing) payload. */
+  reflectedXss?: boolean;
 }
 
 /** Shared, fetched-once context handed to every check so we hit the homepage a single time. */

@@ -8,6 +8,9 @@
 //   --skip seo,a11y                 run everything except these
 //   --cors-path /api/health         test CORS reflection on this path
 //   --rate-limit-path /api/health   burst-test this path for rate limiting (expects 429)
+//   --api-write                     (opt-in) benign unauth POST to write-suggestive API routes; flag any 2xx
+//   --rate-limit-scan               (opt-in) auto-burst discovered expensive /api/* routes; expect 429
+//   --xss                           (opt-in) reflected-XSS probe on public query params (inert marker)
 //   --allow-report-only-csp         accept CSP Report-Only as a pass
 //   --max-crawl 25                  how many links/scripts to fetch-check
 //   --plugins <dir>                 dir of custom JSON plugin templates (default ./vibetesting-agent-plugins)
@@ -59,6 +62,7 @@ const CAT_TITLE = {
     framework: '🧩 Framework-specific',
     components: '📦 Vulnerable components',
     host: '🖥️  Host & infrastructure',
+    appstyle: '🏢 App-type rules',
     plugins: '🔌 Custom plugins',
 };
 async function runAudit() {
@@ -497,6 +501,9 @@ async function mainScan() {
         timeoutMs: arg('--timeout') ? num('--timeout', 10_000) : config.timeoutMs,
         pluginsDir: arg('--plugins') ?? config.pluginsDir,
         extraHeaders: hasAuth ? extraHeaders : undefined,
+        apiWrite: flag('--api-write') || !!config.apiWrite,
+        rateLimitScan: flag('--rate-limit-scan') || !!config.rateLimitScan,
+        reflectedXss: flag('--xss') || !!config.reflectedXss,
     };
     const failOn = (arg('--fail-on') ?? config.failOn ?? 'high');
     const quiet = flag('--quiet') || !!config.quiet;

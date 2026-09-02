@@ -11,6 +11,7 @@ const CAT: Record<string, string> = {
   security: 'Security', secrets: 'Leaked secrets', exposure: 'Exposed files & debug', dns: 'DNS & email',
   reliability: 'Reliability', seo: 'SEO', a11y: 'Accessibility', performance: 'Performance',
   agent: 'Agent readiness', framework: 'Framework', components: 'Vulnerable components', host: 'Host & infrastructure',
+  appstyle: 'App-type rules', plugins: 'Custom plugins',
 };
 const SEV_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2, info: 3 };
 

@@ -1,6 +1,6 @@
 export type Severity = 'high' | 'medium' | 'low' | 'info';
 /** Buckets a vibe coder actually cares about: "is it broken / leaking / unfindable / slow?". */
-export type Category = 'security' | 'secrets' | 'exposure' | 'dns' | 'reliability' | 'seo' | 'a11y' | 'performance' | 'agent' | 'framework' | 'components' | 'host' | 'plugins';
+export type Category = 'security' | 'secrets' | 'exposure' | 'dns' | 'reliability' | 'seo' | 'a11y' | 'performance' | 'agent' | 'framework' | 'components' | 'host' | 'appstyle' | 'plugins';
 export interface Finding {
     id: string;
     category: Category;
@@ -34,6 +34,15 @@ export interface ScanOptions {
      *  reach pages behind login. Never attached to the attack-probe requests (CORS/open-redirect) or any
      *  cross-origin fetch, to avoid leaking your session to a third party. */
     extraHeaders?: Record<string, string>;
+    /** Opt-in (#24): send a benign unauthenticated POST to write-suggestive API routes and flag any 2xx.
+     *  Non-destructive (no-op body, destructive verbs skipped) but off by default so the scan stays quiet. */
+    apiWrite?: boolean;
+    /** Opt-in (#24): autonomously burst discovered expensive /api/* routes (~15 requests each) and expect
+     *  a 429. Off by default — bursting is louder than a plain GET. */
+    rateLimitScan?: boolean;
+    /** Opt-in (#24): probe public query params with an inert marker and flag unencoded reflection
+     *  (reflected XSS / HTML injection). Off by default — this actively injects a (non-executing) payload. */
+    reflectedXss?: boolean;
 }
 /** Shared, fetched-once context handed to every check so we hit the homepage a single time. */
 export interface ScanContext {

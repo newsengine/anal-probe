@@ -18,6 +18,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "probe": "node --experimental-strip-types src/cli.ts",
+    "catalog": "npm run build && node scripts/gen-catalog.mjs",
     "update-vuln-db": "node scripts/update-vuln-db.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
