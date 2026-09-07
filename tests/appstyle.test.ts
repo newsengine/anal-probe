@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { probe } from '../dist/probe.js';
-import { detectAppStyles, appStyleRuleSpecs } from '../dist/appstyle.js';
+import { detectAppStyles, appStyleRuleSpecs, looksLikeArticlePath } from '../dist/appstyle.js';
 import { catalogEntryFor } from '../dist/catalog.js';
 import { startServer } from './helpers/http-fixture.ts';
 import type { ScanContext } from '../dist/types.js';
@@ -85,4 +85,28 @@ test('appstyle: every rule spec is catalogued and covers all 20 app types', () =
   }
   const keys = new Set(specs.map((s) => s.key));
   assert.equal(keys.size, 20, `expected rules for 20 app types, got ${keys.size}: ${[...keys].join(', ')}`);
+});
+
+// ── Regression: article-schema false positive (2026-09-08) ──────────────────
+// appstyle rules analyse the HOMEPAGE. A homepage legitimately carries
+// WebSite/Organization schema and no Article schema, so the blog article-schema
+// rule failed on every correctly built news site — including dynamicbusiness.com,
+// whose article pages emit full NewsArticle JSON-LD (verified with this very
+// extraction). A check that cries wolf gets ignored, so it now only judges
+// pages that actually look like articles.
+test('looksLikeArticlePath: listings and homepages are not articles', () => {
+  for (const p of ['/', '/blog', '/news', '/articles', '/category/finance', '/tag/ai', '/topics/news', '/author/jane', '/page/2']) {
+    assert.equal(looksLikeArticlePath(p), false, `${p} should not count as an article`);
+  }
+});
+
+test('looksLikeArticlePath: real article URLs are articles', () => {
+  for (const p of [
+    '/article/turns-out-the-scariest-sales-tactic-is-also-the-most-effective-one',
+    '/retail-blogs/why-more-australian-retailers-are-rethinking-their-supplier-contracts',
+    '/topics/news/australian-ai-funding-hits-839m.html',
+    '/blog/hello-world',
+  ]) {
+    assert.equal(looksLikeArticlePath(p), true, `${p} should count as an article`);
+  }
 });

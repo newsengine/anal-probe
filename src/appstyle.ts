@@ -31,6 +31,47 @@ export interface AppContext {
   isHttps: boolean;
 }
 
+/**
+ * Does this path plausibly address a single article, rather than a homepage,
+ * feed, section index or tag listing? Used to decide whether an article-level
+ * assertion is even applicable to the page being analysed.
+ */
+/**
+ * Is the analysed MARKUP a single article page (rather than a homepage, feed or
+ * listing)? Reads the html itself so an article-level assertion is only made
+ * about markup that actually claims to be an article.
+ */
+export function htmlIsSingleArticle(a: Pick<AppContext, 'hay' | 'path'>): boolean {
+  // The strongest declaration a page can make about itself.
+  if (/property=["']og:type["']\s+content=["']article["']/i.test(a.hay)) return true;
+  if (/content=["']article["']\s+property=["']og:type["']/i.test(a.hay)) return true;
+  // Otherwise fall back to the URL shape — only meaningful when the markup
+  // carries no self-declaration at all.
+  return looksLikeArticlePath(a.path);
+}
+
+export function looksLikeArticlePath(path: string): boolean {
+  const p = (path || '/').toLowerCase().replace(/\/+$/, '');
+  if (!p || p === '/') return false;
+
+  const segs = p.split('/').filter(Boolean);
+  const last = (segs[segs.length - 1] || '').replace(/\.html?$/, '');
+
+  // Primary signal: a headline-shaped slug. This wins over any prefix, because
+  // real sites nest articles under listing-ish roots
+  // (e.g. /topics/news/australian-ai-funding-hits-839m.html).
+  if (last.split('-').filter(Boolean).length >= 3) return true;
+
+  // Secondary: a conventional single-post prefix with a non-numeric slug below
+  // it (/blog/hello-world), but not the section root itself (/blog) and not
+  // pagination (/blog/2).
+  if (segs.length >= 2 && /^(blog|news|articles?|posts?|insights?|stories)$/.test(segs[0])) {
+    return !/^\d+$/.test(last);
+  }
+
+  return false;
+}
+
 function buildAppContext(ctx: ScanContext): AppContext {
   const html = ctx.html || '';
   const hay = html.toLowerCase();
@@ -211,7 +252,24 @@ const PACKS: AppStylePack[] = [
     { id: 'appstyle.blog.feed', title: 'Blog exposes an RSS/Atom feed', severity: 'low', description: 'A content site without a feed loses syndication and reader tooling.',
       run: (_c, a) => { const feed = /type=["']application\/(rss|atom)\+xml["']/i.test(a.html); return { pass: feed, detail: feed ? 'feed <link> present' : 'no RSS/Atom feed advertised', fix: 'Add <link rel="alternate" type="application/rss+xml"> so readers and aggregators can subscribe.' }; } },
     { id: 'appstyle.blog.article-schema', title: 'Articles carry JSON-LD schema', severity: 'low', description: 'Article structured data drives rich results in search.',
-      run: (_c, a) => { const ok = a.jsonLdTypes.some((t) => /article|blogposting|newsarticle/.test(t)); return { pass: ok, detail: ok ? 'Article JSON-LD present' : 'no Article/BlogPosting structured data', fix: 'Add Article JSON-LD (headline, author, datePublished) for rich search results.' }; } },
+      // App-style rules analyse the HOMEPAGE (see appstyle.detected). A homepage
+      // is not an article, so it legitimately carries WebSite/Organization
+      // schema and no Article schema — asserting here failed on every correctly
+      // built news site, including ones whose article pages DO emit full
+      // NewsArticle JSON-LD. A check that cries wolf gets ignored, so only
+      // judge when the analysed page actually looks like an article.
+      run: (_c, a) => {
+        const ok = a.jsonLdTypes.some((t) => /article|blogposting|newsarticle/.test(t));
+        if (ok) return { pass: true, detail: 'Article JSON-LD present' };
+        // Gate on the ANALYSED HTML, not the requested path: app-style rules run
+        // against the homepage, so `a.path` can name an article while `a.html`
+        // is the home page. Judging an article-level rule from homepage markup
+        // is what produced the false positive.
+        if (!htmlIsSingleArticle(a)) {
+          return { pass: true, detail: 'not evaluated: the analysed page is not a single article (app-style rules read the homepage) — check an article page directly for its Article/NewsArticle schema' };
+        }
+        return { pass: false, detail: 'no Article/BlogPosting structured data', fix: 'Add Article JSON-LD (headline, author, datePublished) for rich search results.' };
+      } },
   ] },
   { key: 'auth-portal', rules: [
     { id: 'appstyle.auth.https', title: 'Login is served over HTTPS', severity: 'high', description: 'Credentials entered on an http page are sent in clear text.',
