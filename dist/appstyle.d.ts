@@ -17,6 +17,18 @@ export interface AppContext {
     headers: Headers;
     isHttps: boolean;
 }
+/**
+ * Does this path plausibly address a single article, rather than a homepage,
+ * feed, section index or tag listing? Used to decide whether an article-level
+ * assertion is even applicable to the page being analysed.
+ */
+/**
+ * Is the analysed MARKUP a single article page (rather than a homepage, feed or
+ * listing)? Reads the html itself so an article-level assertion is only made
+ * about markup that actually claims to be an article.
+ */
+export declare function htmlIsSingleArticle(a: Pick<AppContext, 'hay' | 'path'>): boolean;
+export declare function looksLikeArticlePath(path: string): boolean;
 /** Detect business archetype(s) from the homepage. Returns scored signals, highest first. */
 export declare function detectAppStyles(ctx: ScanContext): AppStyleSignal[];
 /**
