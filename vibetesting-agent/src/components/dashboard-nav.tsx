@@ -6,6 +6,7 @@ export function DashboardNav({ user }: { user: User }) {
     ['/dashboard', 'Overview'],
     ['/dashboard/projects', 'Projects'],
     ['/dashboard/scans', 'Scans'],
+    ['/dashboard/reports', 'Reports'],
     ['/dashboard/keys', 'API keys'],
     ['/dashboard/billing', 'Billing'],
     ['/dashboard/settings', 'Settings'],

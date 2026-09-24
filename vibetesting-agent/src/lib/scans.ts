@@ -6,6 +6,7 @@ import { runScan, buildFixPack, type Finding, type ScanResult } from './scanner'
 import { buildSecurityReviewHtml } from './security-review';
 import { audit } from './audit';
 import { notifyScanComplete } from './notify';
+import { recordRun } from './test-ledger';
 import { config } from './config';
 import { assertSafeScanUrl } from './url-safety';
 import { resolveAuthHeaders } from './project-auth';
@@ -283,6 +284,13 @@ async function finalizeScanSuccess(
     userId: scan.userId,
     target: scan.url,
     detail: { scanId: scan.id, score: result.score, grade: result.grade, agentId: extra?.agentId },
+  });
+
+  // #32 — log this run + every sub-test (keyed by VTA number) to the ledger. Non-fatal by contract.
+  await recordRun({
+    scanId: scan.id, userId: scan.userId, projectId: scan.projectId, target: scan.url,
+    actor: extra?.agentId || 'edge', trigger: scan.trigger, findings: result.findings,
+    startedAt: scan.startedAt ?? undefined, finishedAt: new Date(),
   });
 
   const users = await db.select().from(schema.users).where(eq(schema.users.id, scan.userId)).limit(1);

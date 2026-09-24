@@ -133,7 +133,51 @@ export const rateLimits = sqliteTable('rate_limits', {
   windowStart: integer('window_start', { mode: 'timestamp_ms' }).notNull(),
 });
 
+// #32 — the run-ledger: one row per test run, with one test_results row per SUB-TEST (keyed by VTA number)
+// so every scan is auditable ("VTA-0008 on site X: pass/fail over time") and drives the daily report.
+export const testRuns = sqliteTable('test_runs', {
+  id: text('id').primaryKey(),
+  scanId: text('scan_id').references(() => scans.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  projectId: text('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  runNumber: integer('run_number'),                 // monotonic per (user, target)
+  target: text('target').notNull(),
+  actor: text('actor').notNull(),
+  trigger: text('trigger'),
+  priority: text('priority', { enum: ['critical', 'high', 'medium', 'low', 'clean'] }).notNull(),
+  passed: integer('passed').notNull().default(0),
+  failed: integer('failed').notNull().default(0),
+  failHigh: integer('fail_high').notNull().default(0),
+  failMedium: integer('fail_medium').notNull().default(0),
+  failLow: integer('fail_low').notNull().default(0),
+  startedAt: integer('started_at', { mode: 'timestamp_ms' }),
+  finishedAt: integer('finished_at', { mode: 'timestamp_ms' }),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+}, (t) => [
+  index('test_runs_user_idx').on(t.userId),
+  index('test_runs_target_idx').on(t.target, t.runNumber),
+  index('test_runs_project_idx').on(t.projectId),
+]);
+
+export const testResults = sqliteTable('test_results', {
+  id: text('id').primaryKey(),
+  runId: text('run_id').notNull().references(() => testRuns.id, { onDelete: 'cascade' }),
+  vtaNumber: integer('vta_number'),                 // stable VTA test number (null if uncatalogued)
+  checkId: text('check_id').notNull(),
+  category: text('category'),
+  severity: text('severity'),
+  pass: integer('pass', { mode: 'boolean' }).notNull(),
+  detail: text('detail'),
+  atlas: text('atlas'),                             // comma-separated ATLAS technique ids, when applicable
+}, (t) => [
+  index('test_results_run_idx').on(t.runId),
+  index('test_results_check_idx').on(t.checkId),
+  index('test_results_vta_idx').on(t.vtaNumber),
+]);
+
 export type User = typeof users.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type Scan = typeof scans.$inferSelect;
 export type ApiKey = typeof apiKeys.$inferSelect;
+export type TestRun = typeof testRuns.$inferSelect;
+export type TestResult = typeof testResults.$inferSelect;

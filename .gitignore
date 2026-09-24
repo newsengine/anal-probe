@@ -4,7 +4,8 @@ node_modules
 # tenant-isolation local config (contains tenant ids)
 examples/tenant-isolation/config.json
 examples/security-suite/config.json
-reports/
+# generated scan reports at the repo root (NOT the hosted app's /dashboard/reports route)
+/reports/
 
 # agent worktrees (isolation)
 .claude/worktrees/
