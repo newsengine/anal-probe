@@ -1,16 +1,29 @@
 #!/usr/bin/env node
 // scripts/gen-catalog.mjs
-// Regenerate docs/CHECKS.md from the canonical catalog in src/catalog.ts. Run `npm run catalog`
-// (which builds first). tests/catalog.test.ts fails if the committed docs/CHECKS.md is stale, so this
-// is the one command to run after adding or upgrading a check.
+// Maintain the VTA test-number registry (src/catalog-numbers.ts) and regenerate docs/CHECKS.md from the
+// canonical catalog in src/catalog.ts. Run `npm run catalog` (which builds first). tests/catalog.test.ts
+// fails if the committed registry or docs/CHECKS.md is stale, so this is the one command to run after
+// adding or upgrading a check.
+//
+// Numbering is APPEND-ONLY: existing numbers are preserved, new check ids get the next integer, retired
+// ids keep their (reserved) number forever.
 
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { renderCatalogMarkdown } from '../dist/catalog.js';
+import { CATALOG, assignNumbers, renderCatalogNumbers, renderCatalogMarkdown } from '../dist/catalog.js';
+import { CATALOG_NUMBERS } from '../dist/catalog-numbers.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const OUT_FILE = join(__dirname, '..', 'docs', 'CHECKS.md');
+const root = join(__dirname, '..');
 
-writeFileSync(OUT_FILE, renderCatalogMarkdown());
-console.log(`wrote ${OUT_FILE}`);
+// 1. Update the append-only number registry (preserves existing, appends new).
+const updated = assignNumbers(CATALOG.map((c) => c.id), CATALOG_NUMBERS);
+const added = Object.keys(updated).length - Object.keys(CATALOG_NUMBERS).length;
+writeFileSync(join(root, 'src', 'catalog-numbers.ts'), renderCatalogNumbers(updated));
+console.log(`catalog-numbers.ts: ${Object.keys(updated).length} numbers (${added} new)`);
+if (added > 0) console.log('  ↳ new numbers assigned — rebuild (npm run build) so docs pick them up, then re-run.');
+
+// 2. Regenerate docs/CHECKS.md (uses numbers from the freshly-built dist).
+writeFileSync(join(root, 'docs', 'CHECKS.md'), renderCatalogMarkdown());
+console.log('wrote docs/CHECKS.md');

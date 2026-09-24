@@ -15,6 +15,7 @@ import { detectStacks } from './detect.js';
 import { hostChecks } from './host.js';
 import { pluginChecks } from './plugins.js';
 import { appStyleChecks } from './appstyle.js';
+import { atlasChecks } from './atlas.js';
 
 export type { Category, Finding, ScanContext, ScanOptions, Severity };
 // Back-compat alias: ProbeOptions was the old name.
@@ -34,6 +35,7 @@ const RUNNERS: Record<Category, (ctx: ScanContext) => Promise<Finding[]>> = {
   components: componentChecks,
   host: hostChecks,
   appstyle: appStyleChecks,
+  atlas: atlasChecks,
   plugins: pluginChecks,
 };
 

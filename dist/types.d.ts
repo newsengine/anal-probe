@@ -1,6 +1,6 @@
 export type Severity = 'high' | 'medium' | 'low' | 'info';
 /** Buckets a vibe coder actually cares about: "is it broken / leaking / unfindable / slow?". */
-export type Category = 'security' | 'secrets' | 'exposure' | 'dns' | 'reliability' | 'seo' | 'a11y' | 'performance' | 'agent' | 'framework' | 'components' | 'host' | 'appstyle' | 'plugins';
+export type Category = 'security' | 'secrets' | 'exposure' | 'dns' | 'reliability' | 'seo' | 'a11y' | 'performance' | 'agent' | 'framework' | 'components' | 'host' | 'appstyle' | 'atlas' | 'plugins';
 export interface Finding {
     id: string;
     category: Category;
@@ -43,6 +43,9 @@ export interface ScanOptions {
     /** Opt-in (#24): probe public query params with an inert marker and flag unencoded reflection
      *  (reflected XSS / HTML injection). Off by default — this actively injects a (non-executing) payload. */
     reflectedXss?: boolean;
+    /** Opt-in (ATLAS): send a benign canary prompt-injection probe to a detected chat/LLM endpoint
+     *  (AML.T0051). Off by default — it POSTs an (inert) instruction to the model. */
+    aiProbe?: boolean;
 }
 /** Shared, fetched-once context handed to every check so we hit the homepage a single time. */
 export interface ScanContext {

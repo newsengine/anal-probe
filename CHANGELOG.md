@@ -7,6 +7,23 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Stable test numbering (`VTA-NNNN`):** every check/family now carries a permanent number from an
+  append-only registry (`src/catalog-numbers.ts`, maintained by `npm run catalog`; numbers are never
+  reused, even for retired checks). Numbers appear in `docs/CHECKS.md` and are the key the run-ledger,
+  daily report, and (planned) GitHub-issue feed reference. A concrete finding inherits its family's
+  number (`header.x-frame-options` → the `header.` family's `VTA-0008`).
+- **`atlas` category — MITRE ATLAS AI/LLM attack surface:** when an AI/LLM surface is detected (chat/
+  inference markers or endpoints), the scanner runs ATLAS-mapped checks, each citing its technique id —
+  downloadable model artifacts (`AML.T0044`), reachable inference endpoint (`AML.T0040`), system-prompt/
+  provider-key leakage (`AML.T0057`), unthrottled cost/DoS (`AML.T0034`/`AML.T0029`, opt-in
+  `--rate-limit-scan`), and a benign prompt-injection canary (`AML.T0051`, opt-in `--ai-probe`). Only
+  runs on a detected AI surface — no false-probing a non-AI app.
+- **Run-ledger + Priority-Status report:** every scan produces a DB-ready run record — one row per
+  sub-test, keyed by VTA number, with the target, actor, timestamps and a headline priority
+  (critical/high/medium/low/clean). `--ledger <file.jsonl>` appends each run (monotonic per-target run
+  numbers); `--priority` prints the daily-report cover page (status banner, ranked issues by number,
+  trend vs the previous run, category roll-up). The record maps 1:1 to the planned hosted `test_runs` /
+  `test_results` database tables.
 - **`appstyle` category — app-type-aware rules for the top 20 business archetypes:** the scanner now
   fingerprints *what kind of app* it is from the homepage (e-commerce, SaaS dashboard, marketing site,
   blog/CMS, auth portal, headless API, marketplace, booking, fintech, healthcare, social/community,

@@ -62,8 +62,18 @@ export {
 } from './api.js';
 export {
   CATALOG, catalogEntryFor, scannerSpecs, renderCatalogMarkdown,
+  vtaNumber, vtaCode, assignNumbers, renderCatalogNumbers,
   type CheckSpec, type CheckClass,
 } from './catalog.js';
+export { CATALOG_NUMBERS } from './catalog-numbers.js';
+export {
+  atlasChecks, detectAiSurface, atlasCheckSpecs, ATLAS_TECHNIQUES,
+  type AtlasCheckSpec,
+} from './atlas.js';
+export {
+  buildRunRecord, priorityOf, appendRun, readRuns, renderPriorityReport,
+  type RunRecord, type SubTestResult, type Priority,
+} from './ledger.js';
 export {
   appStyleChecks, detectAppStyles, appStyleRuleSpecs, APP_STYLE_KEYS,
   type AppStyleKey, type AppStyleSignal, type AppStyleRuleSpec,

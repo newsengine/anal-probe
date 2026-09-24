@@ -11,6 +11,7 @@ import { detectStacks } from './detect.js';
 import { hostChecks } from './host.js';
 import { pluginChecks } from './plugins.js';
 import { appStyleChecks } from './appstyle.js';
+import { atlasChecks } from './atlas.js';
 const RUNNERS = {
     security: securityChecks,
     secrets: secretChecks,
@@ -25,6 +26,7 @@ const RUNNERS = {
     components: componentChecks,
     host: hostChecks,
     appstyle: appStyleChecks,
+    atlas: atlasChecks,
     plugins: pluginChecks,
 };
 export const ALL_CATEGORIES = Object.keys(RUNNERS);
