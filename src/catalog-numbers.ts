@@ -151,4 +151,6 @@ export const CATALOG_NUMBERS: Record<string, number> = {
   "atlas.data-leak": 145,
   "atlas.cost-dos": 146,
   "atlas.prompt-injection": 147,
+  "atlas.model-enum": 148,
+  "components.server-cve.": 149,
 };

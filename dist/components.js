@@ -6,6 +6,7 @@
 // then matches a curated table of known-vulnerable version ranges. Black-box, zero-dependency.
 import { html as H, resolveUrl } from './core.js';
 import { VULN_DATA } from './vuln-data.js';
+import { serverCveFindings } from './servercve.js';
 export { VULN_DATA_META } from './vuln-data.js';
 const f = (id, title, severity, pass, detail, fix) => ({ category: 'components', id, title, severity, pass, detail, fix });
 // --- semver-lite: compare dotted numeric versions, tolerating pre-release/junk suffixes. ---
@@ -71,6 +72,9 @@ export function matchVulnerabilities(c) {
 }
 export async function componentChecks(ctx) {
     const out = [];
+    // Server/runtime CVEs from a disclosed version banner (#36) — always checked, independent of client libs.
+    const serverCves = serverCveFindings(ctx);
+    out.push(...serverCves);
     const components = detectComponents(ctx.html, ctx.baseUrl);
     if (!components.length) {
         out.push(f('components.none', 'No fingerprintable client-side libraries', 'info', true, 'no known JS library + version detected in script/link URLs or banners', undefined));

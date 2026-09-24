@@ -7,6 +7,19 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Auto GitHub-issue feed (`--github-issues <owner/repo>`):** turns findings into an idempotent set of
+  tracking issues — one per failing check, keyed by VTA number + target host + check id, so re-runs update
+  the same issue instead of duplicating and auto-close it when the check passes again. Dry-run by default;
+  `--apply` writes via `gh`. Multi-target-safe (never touches another host's issues). [#34]
+- **Auto fix pack (`--fix-pack <file.md>`):** a PR-ready remediation doc — consolidated security-header
+  config for Next.js / Netlify / nginx / Vercel, plus a per-finding checklist keyed by VTA number and
+  grouped by severity. [#35]
+- **Server/runtime CVE correlation (`components.server-cve.*`):** a disclosed `Server`/`X-Powered-By`
+  version is matched against a curated, low-false-positive table of high-signal CVEs (Apache 2.4.49
+  path-traversal/RCE, OpenSSH regreSSHion, OpenSSL X.509 overflow, PHP-FPM RCE, nginx smuggling). [#36]
+- **ATLAS model-enumeration check (`atlas.model-enum.*`, AML.T0040):** flags an OpenAI/Ollama/vLLM-style
+  server that lists its model catalogue (`/v1/models`, `/api/tags`) unauthenticated; plus a full ATLAS
+  coverage matrix at [`docs/atlas.md`](docs/atlas.md). [#37]
 - **Stable test numbering (`VTA-NNNN`):** every check/family now carries a permanent number from an
   append-only registry (`src/catalog-numbers.ts`, maintained by `npm run catalog`; numbers are never
   reused, even for retired checks). Numbers appear in `docs/CHECKS.md` and are the key the run-ledger,

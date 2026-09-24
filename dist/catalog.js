@@ -106,6 +106,7 @@ export const CATALOG = [
     { id: 'framework.wp.user-enum', category: 'framework', title: 'WordPress user enumeration', severity: 'medium', cls: 'probe', since: '0.6.0', description: 'The WP REST API leaks the user list.' },
     { id: 'framework.django.debug', category: 'framework', title: 'Django DEBUG=True', severity: 'high', cls: 'probe', since: '0.6.0', description: 'Django is running with DEBUG enabled in production.' },
     // ── components (OWASP A06) ─────────────────────────────────────────────────────────────────────
+    { id: 'components.server-cve.', dynamic: true, category: 'components', title: 'Server/runtime version has a known CVE', severity: 'high', cls: 'passive', since: '0.7.0', description: 'A disclosed Server/X-Powered-By version matches a curated high-signal CVE (Apache/nginx/OpenSSH/OpenSSL/PHP).' },
     { id: 'components.', dynamic: true, category: 'components', title: 'Client library vulnerability', severity: 'high', cls: 'passive', since: '0.6.0', description: 'A fingerprinted client-side JS library (retire.js-style) is in a known-vulnerable version range.' },
     { id: 'components.summary', category: 'components', title: 'Client library inventory', severity: 'info', cls: 'passive', since: '0.6.0', description: 'Summary of client-side JS libraries detected.' },
     { id: 'components.none', category: 'components', title: 'No vulnerable components', severity: 'info', cls: 'passive', since: '0.6.0', description: 'Clean-signal pass — no known-vulnerable client libs.' },
