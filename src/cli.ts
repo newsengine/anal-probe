@@ -14,6 +14,8 @@
 //   --ai-probe                      (opt-in) MITRE ATLAS prompt-injection canary probe on a chat/LLM endpoint
 //   --ledger <file.jsonl>           append this run (+ every sub-test, keyed by VTA number) to a ledger database
 //   --priority                      print the Priority-Status report (daily-report cover page) first
+//   --fix-pack <file.md>            write a PR-ready fix pack (header config + per-finding checklist)
+//   --github-issues <owner/repo>    feed findings into the GitHub issue tracker (dry-run; add --apply to write)
 //   --allow-report-only-csp         accept CSP Report-Only as a pass
 //   --max-crawl 25                  how many links/scripts to fetch-check
 //   --plugins <dir>                 dir of custom JSON plugin templates (default ./vibetesting-agent-plugins)
@@ -45,6 +47,9 @@ import { renderAgentReport } from './agent-report.js';
 import { renderGherkinFeature } from './gherkin.js';
 import { initRepo } from './init.js';
 import { buildRunRecord, appendRun, readRuns, renderPriorityReport, type RunRecord } from './ledger.js';
+import { planIssueActions, keyFromBody, summarizeActions, type ExistingIssue } from './issues.js';
+import { renderFixPack } from './fixes.js';
+import { execFileSync } from 'node:child_process';
 
 const VERSION = (() => {
   try { return JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version as string; }
@@ -82,6 +87,45 @@ async function runAudit() {
     console.log(`\n${result.total} total advisories\n`);
   }
   process.exit(result.error ? 2 : failsAtLevel(result, level) ? 1 : 0);
+}
+
+// #34 — sync findings to a GitHub repo's issue tracker via the `gh` CLI. Idempotent: matches existing
+// issues by the vta-key marker, opens new ones, refreshes matched ones, and closes ones that now pass.
+// Dry-run by default; only writes when apply=true.
+function syncGithubIssues(repo: string, findings: Finding[], target: string, apply: boolean): void {
+  const gh = (args: string[], input?: string): string => {
+    try { return execFileSync('gh', args, { encoding: 'utf8', input, stdio: ['pipe', 'pipe', 'pipe'] }); }
+    catch (e: any) { throw new Error(`gh ${args.slice(0, 2).join(' ')} failed: ${String(e?.stderr || e?.message || e)}`); }
+  };
+  let existing: ExistingIssue[] = [];
+  try {
+    const raw = gh(['issue', 'list', '--repo', repo, '--label', 'vta', '--state', 'all', '--limit', '500', '--json', 'number,state,body']);
+    existing = (JSON.parse(raw) as { number: number; state: string; body: string }[])
+      .map((i) => ({ number: i.number, state: i.state.toLowerCase() === 'closed' ? 'closed' as const : 'open' as const, key: keyFromBody(i.body || '') || '' }))
+      .filter((i) => i.key);
+  } catch (e) { console.error(`⚠️  could not list existing issues (${String((e as Error).message)}); planning against none`); }
+
+  const plan = planIssueActions(findings, { target, existing });
+  console.error(`🔖 GitHub issue feed for ${repo}: ${summarizeActions(plan)}${apply ? '' : '  (dry-run — pass --apply to write)'}`);
+  if (!apply) {
+    for (const s of plan.toOpen) console.error(`   + open   ${s.title}`);
+    for (const u of plan.toUpdate) console.error(`   ~ update #${u.number} ${u.spec.title}`);
+    for (const c of plan.toClose) console.error(`   - close  #${c.number} (${c.key})`);
+    return;
+  }
+  for (const s of plan.toOpen) {
+    try { gh(['issue', 'create', '--repo', repo, '--title', s.title, '--body-file', '-', '--label', s.labels.join(',')], s.body); }
+    catch (e) { console.error(`   open failed: ${String((e as Error).message)}`); }
+  }
+  for (const u of plan.toUpdate) {
+    try { gh(['issue', 'edit', String(u.number), '--repo', repo, '--body-file', '-'], u.spec.body); }
+    catch (e) { console.error(`   update #${u.number} failed: ${String((e as Error).message)}`); }
+  }
+  for (const c of plan.toClose) {
+    try { gh(['issue', 'close', String(c.number), '--repo', repo, '--comment', 'Resolved — this check now passes on the latest VibeTesting Agent scan.']); }
+    catch (e) { console.error(`   close #${c.number} failed: ${String((e as Error).message)}`); }
+  }
+  console.error(`   done: opened ${plan.toOpen.length}, updated ${plan.toUpdate.length}, closed ${plan.toClose.length}`);
 }
 
 const failGate = (findings: Finding[], failOn: 'high' | 'medium' | 'any'): boolean => {
@@ -468,6 +512,17 @@ async function mainScan() {
   }
   // --priority: print the daily-report cover page (Priority Status first) before anything else.
   if (flag('--priority')) console.log(renderPriorityReport(record, previousRun));
+
+  // --fix-pack <file.md>: PR-ready fixes (consolidated header config + per-finding checklist).
+  const fixPackPath = arg('--fix-pack');
+  if (fixPackPath) {
+    writeFileSync(fixPackPath, renderFixPack(findings, { target: url, projectName: arg('--project-name') || arg('--name') }));
+    console.error(`🛠️  wrote fix pack → ${fixPackPath}`);
+  }
+
+  // --github-issues <owner/repo>: feed findings into the issue tracker (idempotent; --apply to write).
+  const issuesRepo = arg('--github-issues');
+  if (issuesRepo) syncGithubIssues(issuesRepo, findings, url, flag('--apply'));
 
   // --report <file.html> / --pdf <file.pdf>: a shareable table report (every check + result + fix +
   // standards). PDF renders the same HTML via the optional playwright-core battery.

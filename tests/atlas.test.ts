@@ -20,6 +20,7 @@ function aiHandler(): http.RequestListener {
     const url = new URL(req.url || '/', 'http://fixture.local');
     const p = url.pathname;
     if (p === '/model.gguf') { res.writeHead(200, { 'content-type': 'application/octet-stream' }); res.end('GGUF\x00\x00 fake weights'); return; }
+    if (p === '/api/tags') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ models: [{ name: 'llama3:8b' }, { name: 'mistral' }] })); return; }
     if (p === '/api/chat') {
       if (req.method === 'POST') {
         let body = ''; req.on('data', (c) => (body += c)); req.on('end', () => {
@@ -62,6 +63,7 @@ test('atlas: model-artifact + inference checks fire on a vulnerable AI app', asy
     assert.ok(findings.some((f) => f.id === 'atlas.detected'), 'AI surface should be detected');
     assert.ok(anyFail(findings, 'atlas.model-artifact'), 'downloadable model.gguf should fail (AML.T0044)');
     assert.ok(findings.some((f) => f.id === 'atlas.inference-open'), 'reachable inference endpoint noted (AML.T0040)');
+    assert.ok(anyFail(findings, 'atlas.model-enum'), 'exposed /api/tags model list should fail (AML.T0040)');
     // Opt-in probes are OFF by default.
     assert.ok(!anyFail(findings, 'atlas.cost-dos'), 'cost-dos must be opt-in');
     assert.ok(!anyFail(findings, 'atlas.prompt-injection'), 'prompt-injection must be opt-in');

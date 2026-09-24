@@ -23,4 +23,7 @@ export { CATALOG, catalogEntryFor, scannerSpecs, renderCatalogMarkdown, vtaNumbe
 export { CATALOG_NUMBERS } from './catalog-numbers.js';
 export { atlasChecks, detectAiSurface, atlasCheckSpecs, ATLAS_TECHNIQUES, type AtlasCheckSpec, } from './atlas.js';
 export { buildRunRecord, priorityOf, appendRun, readRuns, renderPriorityReport, type RunRecord, type SubTestResult, type Priority, } from './ledger.js';
+export { planIssueActions, issueKey, markerFor, keyFromBody, summarizeActions, type IssueSpec, type IssueActions, type ExistingIssue, } from './issues.js';
+export { renderFixPack, missingHeaderLines } from './fixes.js';
+export { serverCveFindings, parseServerBanners, SERVER_CVES, type ServerCve } from './servercve.js';
 export { appStyleChecks, detectAppStyles, appStyleRuleSpecs, APP_STYLE_KEYS, type AppStyleKey, type AppStyleSignal, type AppStyleRuleSpec, } from './appstyle.js';

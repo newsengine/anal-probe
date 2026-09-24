@@ -116,6 +116,20 @@ export async function atlasChecks(ctx: ScanContext): Promise<Finding[]> {
       'Ensure inference endpoints require authentication and rate limiting; an open inference API enables cost/DoS abuse and model-extraction probing.'));
   }
 
+  // AML.T0040 — Model enumeration: an OpenAI/Ollama/vLLM-compatible server lists its models unauthenticated.
+  for (const p of ['/v1/models', '/api/models', '/api/tags', '/models/list']) {
+    const res = await safeFetch(ctx.origin + p, { redirect: 'manual' }, ctx.opts.timeoutMs);
+    if (!res || !res.ok) continue;
+    const body = (await res.text().catch(() => '')).slice(0, 4000);
+    if (/<html/i.test(body)) continue;
+    if (/"(?:data|models)"\s*:\s*\[|"id"\s*:\s*"(?:gpt|claude|llama|mistral|gemini|text-embedding)/i.test(body) || (/"name"\s*:/.test(body) && MODEL_NAME_RE.test(body))) {
+      out.push(f(`atlas.model-enum${p}`, `AI server lists its models unauthenticated at ${p}`, 'medium', false,
+        `[ATLAS AML.T0040 ML Model Inference API Access] ${p} returns the model catalogue with no auth — a public inference server (Ollama/vLLM/OpenAI-compatible) invites cost abuse and model probing`,
+        'Put the inference server behind authentication + rate limiting; do not expose /v1/models or /api/tags publicly.'));
+      break;
+    }
+  }
+
   // AML.T0057 — LLM Data Leakage: an AI endpoint/error leaks the system prompt, model name, or provider key.
   for (const p of live.slice(0, 4)) {
     const res = await safeFetch(ctx.origin + p, { redirect: 'manual', headers: ctx.opts.extraHeaders }, ctx.opts.timeoutMs);
@@ -178,6 +192,7 @@ export function atlasCheckSpecs(): AtlasCheckSpec[] {
     { id: 'atlas.none', title: 'No AI/LLM surface', severity: 'info', atlas: [], description: 'No AI surface detected — ATLAS checks skipped (clean-signal pass).' },
     { id: 'atlas.model-artifact', dynamic: true, title: 'Model artifact publicly downloadable', severity: 'high', atlas: ['AML.T0044'], description: 'Model weights/artifacts (.gguf/.safetensors/.onnx/.pt/.pkl/.bin) are web-served.' },
     { id: 'atlas.inference-open', title: 'AI inference endpoint reachable', severity: 'low', atlas: ['AML.T0040'], description: 'An inference/LLM endpoint answers — confirm it requires auth + rate limiting.' },
+    { id: 'atlas.model-enum', dynamic: true, title: 'AI server lists models unauthenticated', severity: 'medium', atlas: ['AML.T0040'], description: 'An OpenAI/Ollama/vLLM-compatible server exposes its model catalogue (/v1/models, /api/tags) without auth.' },
     { id: 'atlas.data-leak', dynamic: true, title: 'AI endpoint leaks system prompt / provider key', severity: 'high', atlas: ['AML.T0057', 'AML.T0055'], description: 'An AI endpoint/error exposes the system prompt, model config, or a provider API key.' },
     { id: 'atlas.cost-dos', dynamic: true, title: 'No rate limiting on AI endpoint', severity: 'high', atlas: ['AML.T0034', 'AML.T0029'], optIn: true, description: 'An expensive AI route is not throttled (cost-harvesting / model-DoS). Opt-in burst (--rate-limit-scan).' },
     { id: 'atlas.prompt-injection', dynamic: true, title: 'LLM prompt injection', severity: 'high', atlas: ['AML.T0051'], optIn: true, description: 'A benign canary instruction overrides the system prompt on a chat endpoint. Opt-in (--ai-probe).' },

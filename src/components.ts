@@ -8,6 +8,7 @@
 import type { Finding, ScanContext, Severity } from './types.js';
 import { html as H, resolveUrl } from './core.js';
 import { VULN_DATA } from './vuln-data.js';
+import { serverCveFindings } from './servercve.js';
 export { VULN_DATA_META } from './vuln-data.js';
 
 const f = (id: string, title: string, severity: Severity, pass: boolean, detail: string, fix?: string): Finding =>
@@ -77,6 +78,10 @@ export function matchVulnerabilities(c: DetectedComponent): Vuln | null {
 
 export async function componentChecks(ctx: ScanContext): Promise<Finding[]> {
   const out: Finding[] = [];
+  // Server/runtime CVEs from a disclosed version banner (#36) — always checked, independent of client libs.
+  const serverCves = serverCveFindings(ctx);
+  out.push(...serverCves);
+
   const components = detectComponents(ctx.html, ctx.baseUrl);
   if (!components.length) {
     out.push(f('components.none', 'No fingerprintable client-side libraries', 'info', true, 'no known JS library + version detected in script/link URLs or banners', undefined));

@@ -3,7 +3,7 @@
 > Generated from `src/catalog.ts` by `npm run catalog`. Do not edit by hand — edit the catalog and regenerate.
 > `tests/catalog.test.ts` fails the build if the engine emits a finding id that is not listed here, or if this file is stale.
 
-**142** scanner checks + **5** white-box testkit helpers.
+**144** scanner checks + **5** white-box testkit helpers.
 
 Legend — how each check reaches its verdict:
 
@@ -145,6 +145,7 @@ Legend — how each check reaches its verdict:
 
 | # | Check ID | Title | Severity | Class | Default | Standards | Since | What it detects |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| VTA-0149 | `components.server-cve.*` | Server/runtime version has a known CVE | high | passive | on | A06; API8:2023; CWE-1104 CWE-1035 | 0.7.0 | A disclosed Server/X-Powered-By version matches a curated high-signal CVE (Apache/nginx/OpenSSH/OpenSSL/PHP). |
 | VTA-0079 | `components.*` | Client library vulnerability | high | passive | on | A06; API8:2023; CWE-1104 CWE-1035 | 0.6.0 | A fingerprinted client-side JS library (retire.js-style) is in a known-vulnerable version range. |
 | VTA-0080 | `components.summary` | Client library inventory | info | passive | on | A06; API8:2023; CWE-1104 CWE-1035 | 0.6.0 | Summary of client-side JS libraries detected. |
 | VTA-0081 | `components.none` | No vulnerable components | info | passive | on | A06; API8:2023; CWE-1104 CWE-1035 | 0.6.0 | Clean-signal pass — no known-vulnerable client libs. |
@@ -218,6 +219,7 @@ Legend — how each check reaches its verdict:
 | VTA-0142 | `atlas.none` | No AI/LLM surface | info | passive | on | — | 0.7.0 | No AI surface detected — ATLAS checks skipped (clean-signal pass). |
 | VTA-0143 | `atlas.model-artifact*` | Model artifact publicly downloadable | high | probe | on | AML.T0044 | 0.7.0 | Model weights/artifacts (.gguf/.safetensors/.onnx/.pt/.pkl/.bin) are web-served. |
 | VTA-0144 | `atlas.inference-open` | AI inference endpoint reachable | low | probe | on | AML.T0040 | 0.7.0 | An inference/LLM endpoint answers — confirm it requires auth + rate limiting. |
+| VTA-0148 | `atlas.model-enum*` | AI server lists models unauthenticated | medium | probe | on | AML.T0040 | 0.7.0 | An OpenAI/Ollama/vLLM-compatible server exposes its model catalogue (/v1/models, /api/tags) without auth. |
 | VTA-0145 | `atlas.data-leak*` | AI endpoint leaks system prompt / provider key | high | probe | on | AML.T0057 AML.T0055 | 0.7.0 | An AI endpoint/error exposes the system prompt, model config, or a provider API key. |
 | VTA-0146 | `atlas.cost-dos*` | No rate limiting on AI endpoint | high | active | opt-in | AML.T0034 AML.T0029 | 0.7.0 | An expensive AI route is not throttled (cost-harvesting / model-DoS). Opt-in burst (--rate-limit-scan). |
 | VTA-0147 | `atlas.prompt-injection*` | LLM prompt injection | high | active | opt-in | AML.T0051 | 0.7.0 | A benign canary instruction overrides the system prompt on a chat endpoint. Opt-in (--ai-probe). |
