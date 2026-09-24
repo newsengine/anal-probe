@@ -8,7 +8,7 @@ const CAT = {
     security: 'Security', secrets: 'Leaked secrets', exposure: 'Exposed files & debug', dns: 'DNS & email',
     reliability: 'Reliability', seo: 'SEO', a11y: 'Accessibility', performance: 'Performance',
     agent: 'Agent readiness', framework: 'Framework', components: 'Vulnerable components', host: 'Host & infrastructure',
-    appstyle: 'App-type rules', plugins: 'Custom plugins',
+    appstyle: 'App-type rules', atlas: 'AI/LLM attack surface (ATLAS)', plugins: 'Custom plugins',
 };
 const SEV_ORDER = { high: 0, medium: 1, low: 2, info: 3 };
 function stdBadges(id) {

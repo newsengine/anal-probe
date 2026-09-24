@@ -19,6 +19,7 @@ export interface FileConfig {
   apiWrite?: boolean;
   rateLimitScan?: boolean;
   reflectedXss?: boolean;
+  aiProbe?: boolean;
 }
 
 /**

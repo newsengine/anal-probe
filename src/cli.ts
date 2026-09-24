@@ -11,6 +11,9 @@
 //   --api-write                     (opt-in) benign unauth POST to write-suggestive API routes; flag any 2xx
 //   --rate-limit-scan               (opt-in) auto-burst discovered expensive /api/* routes; expect 429
 //   --xss                           (opt-in) reflected-XSS probe on public query params (inert marker)
+//   --ai-probe                      (opt-in) MITRE ATLAS prompt-injection canary probe on a chat/LLM endpoint
+//   --ledger <file.jsonl>           append this run (+ every sub-test, keyed by VTA number) to a ledger database
+//   --priority                      print the Priority-Status report (daily-report cover page) first
 //   --allow-report-only-csp         accept CSP Report-Only as a pass
 //   --max-crawl 25                  how many links/scripts to fetch-check
 //   --plugins <dir>                 dir of custom JSON plugin templates (default ./vibetesting-agent-plugins)
@@ -41,6 +44,7 @@ import { lookupCves } from './cve.js';
 import { renderAgentReport } from './agent-report.js';
 import { renderGherkinFeature } from './gherkin.js';
 import { initRepo } from './init.js';
+import { buildRunRecord, appendRun, readRuns, renderPriorityReport, type RunRecord } from './ledger.js';
 
 const VERSION = (() => {
   try { return JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version as string; }
@@ -63,6 +67,7 @@ const CAT_TITLE: Record<Category, string> = {
   components: '📦 Vulnerable components',
   host: '🖥️  Host & infrastructure',
   appstyle: '🏢 App-type rules',
+  atlas: '🤖 AI/LLM attack surface (MITRE ATLAS)',
   plugins: '🔌 Custom plugins',
 };
 
@@ -425,6 +430,7 @@ async function mainScan() {
     apiWrite: flag('--api-write') || !!config.apiWrite,
     rateLimitScan: flag('--rate-limit-scan') || !!config.rateLimitScan,
     reflectedXss: flag('--xss') || !!config.reflectedXss,
+    aiProbe: flag('--ai-probe') || !!config.aiProbe,
   };
   const failOn = (arg('--fail-on') ?? config.failOn ?? 'high') as 'high' | 'medium' | 'any';
   const quiet = flag('--quiet') || !!config.quiet;
@@ -445,8 +451,23 @@ async function mainScan() {
     // only the homepage was found — fall through to the normal single-URL flow below
   }
 
+  const startedAt = new Date().toISOString();
   const findings = await probe(url, opts);
   const sum = summarize(findings);
+
+  // Run record: every sub-test keyed by its VTA number — logged to the ledger database and used for the
+  // Priority-Status report. Built for every scan; only persisted when --ledger is given.
+  const record = buildRunRecord(findings, { target: url, actor: arg('--actor') || process.env.VTA_ACTOR || 'cli', startedAt });
+  const ledgerPath = arg('--ledger');
+  let previousRun: RunRecord | null = null;
+  if (ledgerPath) {
+    previousRun = readRuns(ledgerPath).filter((r) => r.target === url).slice(-1)[0] || null;
+    const stored = appendRun(ledgerPath, record);
+    record.runNumber = stored.runNumber;
+    console.error(`🗂️  recorded run #${stored.runNumber} (${record.subTests.length} sub-tests, priority ${record.priority}) → ${ledgerPath}`);
+  }
+  // --priority: print the daily-report cover page (Priority Status first) before anything else.
+  if (flag('--priority')) console.log(renderPriorityReport(record, previousRun));
 
   // --report <file.html> / --pdf <file.pdf>: a shareable table report (every check + result + fix +
   // standards). PDF renders the same HTML via the optional playwright-core battery.

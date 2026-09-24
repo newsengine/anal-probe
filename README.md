@@ -44,7 +44,11 @@ npx github:newsengine/vibetesting-agent init https://your-app.example.com --name
 Built for vibe coders shipping with AI: you don't need to know what to look for — the scanner does, and
 every failing finding comes with a one-line **fix**. Exits non-zero so it doubles as a CI gate.
 
-- **Full black-box scan** — 14 categories (below), all from a URL.
+- **Full black-box scan** — 15 categories (below), all from a URL.
+- **Numbered & auditable**: every check has a stable `VTA-NNNN` number; `--ledger <file>` records each run
+  and its sub-tests to a ledger, and `--priority` prints a Priority-Status cover page.
+- **AI-aware (MITRE ATLAS)**: detects an AI/LLM surface and runs ATLAS-mapped checks (model-artifact
+  exposure, open inference, prompt-injection, cost/DoS) — each citing its ATLAS technique id.
 - **App-type aware**: fingerprints the *business archetype* (e-commerce, SaaS, auth portal, fintech,
   healthcare, marketplace, docs, job board, …20 in all) and runs that type's extra rules — only when
   confidently detected. See the `appstyle` rows in [`docs/CHECKS.md`](docs/CHECKS.md).

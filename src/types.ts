@@ -19,6 +19,7 @@ export type Category =
   | 'components'   // OWASP A06: vulnerable/outdated client-side JS libraries (retire.js-style)
   | 'host'         // passive infra intel: resolved IP(s), reverse DNS, CDN/hosting provider (no scanning)
   | 'appstyle'     // business-archetype rules: detects the app TYPE and runs that type's extra checks
+  | 'atlas'        // MITRE ATLAS: AI/LLM attack surface (inference/model/prompt-injection/cost-DoS)
   | 'plugins';     // user-supplied JSON templates (Nuclei-style declarative checks) run by src/plugins.ts
 
 export interface Finding {
@@ -64,6 +65,9 @@ export interface ScanOptions {
   /** Opt-in (#24): probe public query params with an inert marker and flag unencoded reflection
    *  (reflected XSS / HTML injection). Off by default — this actively injects a (non-executing) payload. */
   reflectedXss?: boolean;
+  /** Opt-in (ATLAS): send a benign canary prompt-injection probe to a detected chat/LLM endpoint
+   *  (AML.T0051). Off by default — it POSTs an (inert) instruction to the model. */
+  aiProbe?: boolean;
 }
 
 /** Shared, fetched-once context handed to every check so we hit the homepage a single time. */

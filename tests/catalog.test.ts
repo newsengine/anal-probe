@@ -13,7 +13,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { probe } from '../dist/probe.js';
-import { CATALOG, catalogEntryFor, renderCatalogMarkdown } from '../dist/catalog.js';
+import { CATALOG, catalogEntryFor, renderCatalogMarkdown, vtaNumber, vtaCode, assignNumbers } from '../dist/catalog.js';
+import { CATALOG_NUMBERS } from '../dist/catalog-numbers.js';
 import { SECRET_RULES } from '../dist/core.js';
 import { startKnownBad, startKnownGood } from './helpers/fixtures.ts';
 import type { Finding } from '../dist/types.js';
@@ -24,7 +25,7 @@ const CHECKS_MD = join(__dirname, '..', 'docs', 'CHECKS.md');
 // Offline-safe categories (dns/host need real network/DNS and are excluded here).
 const OFFLINE_CATEGORIES = [
   'security', 'secrets', 'exposure', 'reliability', 'seo', 'a11y', 'performance',
-  'components', 'agent', 'framework', 'appstyle', 'plugins',
+  'components', 'agent', 'framework', 'appstyle', 'atlas', 'plugins',
 ] as const;
 
 async function collectIds(url: string): Promise<Finding[]> {
@@ -92,6 +93,31 @@ test('catalog: every SECRET_RULE resolves to the secret.* family', () => {
     const entry = catalogEntryFor(`secret.${r.id}`);
     assert.ok(entry && entry.category === 'secrets', `secret rule ${r.id} has no catalog family`);
   }
+});
+
+test('numbering: every catalog id has a stable VTA number, unique, registry not stale', () => {
+  // Completeness: every catalog id is numbered (else `npm run catalog` was not run).
+  const missing = CATALOG.filter((c) => vtaNumber(c.id) === undefined).map((c) => c.id);
+  assert.equal(missing.length, 0, `catalog ids without a VTA number (run \`npm run catalog\`):\n  ${missing.join('\n  ')}`);
+
+  // Uniqueness: no two ids share a number.
+  const byNum = new Map<number, string>();
+  for (const [id, n] of Object.entries(CATALOG_NUMBERS)) {
+    assert.ok(!byNum.has(n), `VTA number ${n} used by both ${byNum.get(n)} and ${id}`);
+    byNum.set(n, id);
+  }
+
+  // Append-only / not-stale: re-running the assigner over the current catalog adds nothing.
+  const reassigned = assignNumbers(CATALOG.map((c) => c.id), CATALOG_NUMBERS);
+  assert.equal(Object.keys(reassigned).length, Object.keys(CATALOG_NUMBERS).length,
+    'registry is stale — new catalog ids need numbers; run `npm run catalog`');
+});
+
+test('numbering: a concrete dynamic finding inherits its family number', () => {
+  // header.x-frame-options has no own number; it inherits the `header.` family's.
+  assert.equal(vtaNumber('header.x-frame-options'), vtaNumber('header.'));
+  assert.match(vtaCode('header.x-frame-options'), /^VTA-\d{4}$/);
+  assert.equal(vtaCode('this.id.does.not.exist'), 'VTA-????');
 });
 
 test('catalog: docs/CHECKS.md is up to date (run `npm run catalog`)', () => {
