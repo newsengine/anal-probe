@@ -84,3 +84,4 @@ export {
   appStyleChecks, detectAppStyles, appStyleRuleSpecs, APP_STYLE_KEYS,
   type AppStyleKey, type AppStyleSignal, type AppStyleRuleSpec,
 } from './appstyle.js';
+export { cfBypassHeaders, withCfBypassHeaders } from './cf-bypass-headers.js';

@@ -186,6 +186,19 @@ vibetesting-agent audit --prod --level moderate --json
 > opt-in **`recon`** (port scan) + **`browse`** (browser-functional) modes.
 > Roadmap (PRs welcome): framework preset configs, deeper CVE-informational service ID.
 
+### Cloudflare bot / Access bypass (Dynamic Business)
+
+When probing a site behind Cloudflare Bot Fight / Access, set env vars (never commit secrets):
+
+| Env var | Header | When |
+|---|---|---|
+| `CF_SMOKE_KEY` / `X_SMOKE_KEY` | `x-smoke-key` | Always when set. Legacy: `SMOKE_KEY`. |
+| `CF_ACCESS_CLIENT_ID` | `CF-Access-Client-Id` | **beta.dynamicbusiness.com only** |
+| `CF_ACCESS_CLIENT_SECRET` | `CF-Access-Client-Secret` | **beta.dynamicbusiness.com only** |
+
+Helper: `src/cf-bypass-headers.ts` (auto-merged into CLI `extraHeaders` + `browse`). Local: `set -a; source ~/.config/db-eng/cf-bot.env; set +a`. Reusable workflow `probe.yml` accepts the same secrets.
+
+
 ## Use it in CI across all repos (recommended)
 ```yaml
 # .github/workflows/security.yml in ANY repo

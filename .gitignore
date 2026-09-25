@@ -16,3 +16,6 @@ examples/security-suite/config.json
 **/.dev.vars
 **/.env
 **/.env.*
+
+# allow committed env *examples* (var names only)
+!.env.cf-bots.example

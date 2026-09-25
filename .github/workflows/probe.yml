@@ -10,6 +10,10 @@
 #         cors_path: /api/public/health      # optional
 #         fail_on: high                       # high | medium | any (default high)
 #         allow_report_only_csp: true         # optional, while CSP is still Report-Only
+#       secrets:
+#         CF_SMOKE_KEY: ${{ secrets.CF_SMOKE_KEY }}                 # optional x-smoke-key
+#         CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}   # beta Access only
+#         CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
 #
 name: app-scan
 on:
@@ -22,6 +26,10 @@ on:
       rate_limit_path: { required: false, type: string, default: '' }
       fail_on: { required: false, type: string, default: 'high' }
       allow_report_only_csp: { required: false, type: boolean, default: false }
+    secrets:
+      CF_SMOKE_KEY: { required: false }
+      CF_ACCESS_CLIENT_ID: { required: false }
+      CF_ACCESS_CLIENT_SECRET: { required: false }
 
 jobs:
   scan:
@@ -29,6 +37,12 @@ jobs:
     steps:
       - name: Run vibetesting-agent full scan
         shell: bash
+        env:
+          # Auto-attached by src/cf-bypass-headers.ts when set.
+          # Access headers apply only if inputs.url host is beta.dynamicbusiness.com.
+          CF_SMOKE_KEY: ${{ secrets.CF_SMOKE_KEY }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
           ARGS=("${{ inputs.url }}" --fail-on "${{ inputs.fail_on }}")
           if [ -n "${{ inputs.only }}" ]; then ARGS+=(--only "${{ inputs.only }}"); fi
