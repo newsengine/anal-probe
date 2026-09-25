@@ -192,11 +192,11 @@ When probing a site behind Cloudflare Bot Fight / Access, set env vars (never co
 
 | Env var | Header | When |
 |---|---|---|
-| `CF_SMOKE_KEY` / `X_SMOKE_KEY` | `x-smoke-key` | Always when set. Legacy: `SMOKE_KEY`. |
-| `CF_ACCESS_CLIENT_ID` | `CF-Access-Client-Id` | **beta.dynamicbusiness.com only** |
-| `CF_ACCESS_CLIENT_SECRET` | `CF-Access-Client-Secret` | **beta.dynamicbusiness.com only** |
+| `CF_SMOKE_KEY` / `X_SMOKE_KEY` | `x-smoke-key` | `dynamicbusiness.com` / `*.dynamicbusiness.com` only. Legacy: `SMOKE_KEY`. |
+| `CF_ACCESS_CLIENT_ID` | `CF-Access-Client-Id` | **exact beta.dynamicbusiness.com only** |
+| `CF_ACCESS_CLIENT_SECRET` | `CF-Access-Client-Secret` | **exact beta.dynamicbusiness.com only** |
 
-Helper: `src/cf-bypass-headers.ts` (auto-merged into CLI `extraHeaders` + `browse`). Local: `set -a; source ~/.config/db-eng/cf-bot.env; set +a`. Reusable workflow `probe.yml` accepts the same secrets.
+Helper: `src/cf-bypass-headers.ts` (CLI `extraHeaders` per URL; `browse` uses host-filtered `context.route`, never global `extraHTTPHeaders`). Local: `set -a; source ~/.config/db-eng/cf-bot.env; set +a`. Reusable workflow `probe.yml` accepts the same secrets.
 
 
 ## Use it in CI across all repos (recommended)

@@ -4,11 +4,16 @@ For Dynamic Business probes behind Cloudflare Bot Fight Mode / WAF (and beta Acc
 
 | Env var | Header | Scope |
 |---|---|---|
-| `CF_SMOKE_KEY` / `X_SMOKE_KEY` | `x-smoke-key` | Any host when set (legacy alias: `SMOKE_KEY`) |
-| `CF_ACCESS_CLIENT_ID` | `CF-Access-Client-Id` | `beta.dynamicbusiness.com` only |
-| `CF_ACCESS_CLIENT_SECRET` | `CF-Access-Client-Secret` | `beta.dynamicbusiness.com` only |
+| `CF_SMOKE_KEY` / `X_SMOKE_KEY` | `x-smoke-key` | `dynamicbusiness.com` and `*.dynamicbusiness.com` only (legacy alias: `SMOKE_KEY`) |
+| `CF_ACCESS_CLIENT_ID` | `CF-Access-Client-Id` | exact `beta.dynamicbusiness.com` only |
+| `CF_ACCESS_CLIENT_SECRET` | `CF-Access-Client-Secret` | exact `beta.dynamicbusiness.com` only |
 
-Implementation: [`src/cf-bypass-headers.ts`](../src/cf-bypass-headers.ts). The CLI merges these into same-origin `extraHeaders` automatically when the env vars are present. Access is **beta-only** — not www/production.
+Implementation: [`src/cf-bypass-headers.ts`](../src/cf-bypass-headers.ts).
+
+- **HTTP / CLI scan:** merges into same-origin `extraHeaders` via `withCfBypassHeaders(url)` (per target URL).
+- **Browser (`browse`):** uses `installCfBypassRoute(context)` — host-filtered per request. Never puts Access/smoke secrets on context-global `extraHTTPHeaders` (those would leak to third-party fonts/CDNs).
+
+Access is **beta-only** — not www/production.
 
 ```bash
 set -a; source ~/.config/db-eng/cf-bot.env; set +a
