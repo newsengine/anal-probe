@@ -81,6 +81,10 @@ export {
 export { renderFixPack, missingHeaderLines } from './fixes.js';
 export { serverCveFindings, parseServerBanners, SERVER_CVES, type ServerCve } from './servercve.js';
 export {
+  buildCoverageMap, parseForms, summarizeCoverage,
+  type CoverageMap, type FormSpec, type CrawlMapOptions,
+} from './crawl-map.js';
+export {
   appStyleChecks, detectAppStyles, appStyleRuleSpecs, APP_STYLE_KEYS,
   type AppStyleKey, type AppStyleSignal, type AppStyleRuleSpec,
 } from './appstyle.js';

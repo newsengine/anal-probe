@@ -16,6 +16,7 @@
 //   --priority                      print the Priority-Status report (daily-report cover page) first
 //   --fix-pack <file.md>            write a PR-ready fix pack (header config + per-finding checklist)
 //   --github-issues <owner/repo>    feed findings into the GitHub issue tracker (dry-run; add --apply to write)
+//   --coverage <file.json>          authenticated deep-crawl coverage map (endpoints/params/forms/apis)
 //   --allow-report-only-csp         accept CSP Report-Only as a pass
 //   --max-crawl 25                  how many links/scripts to fetch-check
 //   --plugins <dir>                 dir of custom JSON plugin templates (default ./vibetesting-agent-plugins)
@@ -48,6 +49,7 @@ import { initRepo } from './init.js';
 import { buildRunRecord, appendRun, readRuns, renderPriorityReport } from './ledger.js';
 import { planIssueActions, keyFromBody, summarizeActions } from './issues.js';
 import { renderFixPack } from './fixes.js';
+import { buildCoverageMap, summarizeCoverage } from './crawl-map.js';
 import { withCfBypassHeaders } from './cf-bypass-headers.js';
 import { execFileSync } from 'node:child_process';
 const VERSION = (() => {
@@ -632,6 +634,17 @@ async function mainScan() {
     const issuesRepo = arg('--github-issues');
     if (issuesRepo)
         syncGithubIssues(issuesRepo, findings, url, flag('--apply'));
+    // --coverage <file.json>: authenticated deep-crawl coverage map (endpoints/params/forms/apis).
+    const coveragePath = arg('--coverage');
+    if (coveragePath) {
+        const map = await buildCoverageMap(url, {
+            extraHeaders: opts.extraHeaders,
+            maxPages: arg('--max-crawl') ? num('--max-crawl', 50) : (config.maxCrawl ?? 50),
+            timeoutMs: opts.timeoutMs,
+        });
+        writeFileSync(coveragePath, JSON.stringify(map, null, 2));
+        console.error(`🗺️  ${summarizeCoverage(map)} → ${coveragePath}`);
+    }
     // --report <file.html> / --pdf <file.pdf>: a shareable table report (every check + result + fix +
     // standards). PDF renders the same HTML via the optional playwright-core battery.
     const reportPath = arg('--report');

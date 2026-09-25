@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Authenticated deep-crawl + coverage map (`--coverage <file.json>`):** a bounded, same-origin BFS that
+  (optionally authenticated via `--cookie`/`--header`) discovers the real attack surface — reachable
+  endpoints, query parameters, HTML forms (action/method/fields) and referenced `/api` routes — and
+  reports how much it reached. Safe (GET navigation only, capped, never leaves the origin). This is the
+  foundation the coming authenticated active-testing engines build on. [#42, epic #41]
 - **Auto GitHub-issue feed (`--github-issues <owner/repo>`):** turns findings into an idempotent set of
   tracking issues — one per failing check, keyed by VTA number + target host + check id, so re-runs update
   the same issue instead of duplicating and auto-close it when the check passes again. Dry-run by default;
