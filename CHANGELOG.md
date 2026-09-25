@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Active injection engine (`--authorized-active`, `inject.*`):** opt-in, authorized, **non-destructive**
+  parameter-driven testing over the coverage map's real GET parameters — **SQL injection** (error /
+  boolean / time-based), **server-side template injection** (7*7→49), **OS command injection**
+  (time-based), and **path traversal** (/etc/passwd). GET-only (no writes/DoS/brute-force), bounded, with
+  minimal evidence per hit and OWASP A03/CWE mappings. Off by default; prints an authorization notice;
+  detectors are pure + unit-tested and the full scan is verified against a vulnerable fixture. [#43, epic #41]
 - **Authenticated deep-crawl + coverage map (`--coverage <file.json>`):** a bounded, same-origin BFS that
   (optionally authenticated via `--cookie`/`--header`) discovers the real attack surface — reachable
   endpoints, query parameters, HTML forms (action/method/fields) and referenced `/api` routes — and

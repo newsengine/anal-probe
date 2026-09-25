@@ -3,7 +3,7 @@
 > Generated from `src/catalog.ts` by `npm run catalog`. Do not edit by hand — edit the catalog and regenerate.
 > `tests/catalog.test.ts` fails the build if the engine emits a finding id that is not listed here, or if this file is stale.
 
-**144** scanner checks + **5** white-box testkit helpers.
+**149** scanner checks + **5** white-box testkit helpers.
 
 Legend — how each check reaches its verdict:
 
@@ -46,6 +46,11 @@ Legend — how each check reaches its verdict:
 | VTA-0027 | `csrf` | CSRF protection on forms | medium | passive | on | A01; CWE-352 | 0.6.0 | State-changing HTML forms carry a token or SameSite mitigation. |
 | VTA-0028 | `dom-xss` | DOM-XSS sink | medium | passive | on | A03; CWE-79 | 0.6.0 | A user-controllable source flows into an HTML/JS sink in inline script. |
 | VTA-0029 | `xss.jsonld` | JSON-LD script breakout | medium | passive | on | — | 0.6.0 | Structured-data blocks that fail to escape </script> (stored XSS). |
+| VTA-0150 | `inject.sqli*` | SQL injection | high | active | opt-in | A03; API8:2023; CWE-89 | 0.7.0 | A GET parameter is injectable via error/boolean/time-based SQL injection (--authorized-active). |
+| VTA-0151 | `inject.ssti*` | Server-side template injection | high | active | opt-in | A03; CWE-1336 CWE-94 | 0.7.0 | A GET parameter renders as a server-side template (7*7→49) (--authorized-active). |
+| VTA-0152 | `inject.cmdi*` | OS command injection | high | active | opt-in | A03; CWE-78 | 0.7.0 | A GET parameter injects into a shell (time-based) (--authorized-active). |
+| VTA-0153 | `inject.traversal*` | Path traversal | high | active | opt-in | A01; CWE-22 | 0.7.0 | A GET parameter allows ../ path traversal (/etc/passwd) (--authorized-active). |
+| VTA-0154 | `inject.none` | No injection on tested params | info | active | opt-in | — | 0.7.0 | Clean-signal pass — active injection probes found nothing on the tested parameters. |
 | VTA-0030 | `api.cors*` | CORS on discovered API route | high | active | on | — | 0.7.0 | A discovered /api/* route reflects an arbitrary Origin with credentials (auto-generalized from --cors-path). |
 | VTA-0031 | `api.rate-limit*` | Rate limiting on API routes (auto) | medium | active | opt-in | — | 0.7.0 | Discovered expensive /api/* routes are bursted and expected to 429 (--rate-limit-scan; high on LLM/compute paths). |
 | VTA-0032 | `xss.reflected*` | Reflected XSS / HTML injection | high | active | opt-in | — | 0.7.0 | A benign marker injected into a public query param reflects unencoded into the HTML (--xss). |

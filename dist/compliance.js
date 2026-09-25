@@ -6,6 +6,11 @@
 // Longest-prefix wins, so specific ids override general stems. cwe = MITRE CWE ids; apiTop10 = OWASP API
 // Security Top 10 (2023).
 const STANDARDS = [
+    // Active injection engine (#43) — OWASP A03: Injection.
+    ['inject.sqli', { owasp: 'A03', apiTop10: 'API8:2023', cwe: ['CWE-89'], wstg: ['WSTG-INPV-05'] }],
+    ['inject.ssti', { owasp: 'A03', cwe: ['CWE-1336', 'CWE-94'], wstg: ['WSTG-INPV-18'] }],
+    ['inject.cmdi', { owasp: 'A03', cwe: ['CWE-78'], wstg: ['WSTG-INPV-12'] }],
+    ['inject.traversal', { owasp: 'A01', cwe: ['CWE-22'], wstg: ['WSTG-ATHZ-01'] }],
     ['cookie-prefix.', { asvs: ['V3.4.4'], owasp: 'A05', cwe: ['CWE-614'] }],
     ['cookie.', { asvs: ['V3.4.1', 'V3.4.2', 'V3.4.3'], owasp: 'A05', wstg: ['WSTG-SESS-02'], cwe: ['CWE-614', 'CWE-1004'] }],
     ['cache.sensitive', { asvs: ['V8.2.1'], owasp: 'A05', cwe: ['CWE-525'] }],

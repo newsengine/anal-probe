@@ -37,6 +37,8 @@ export async function buildCoverageMap(seed, opts = {}) {
     const apis = new Set();
     const formKeys = new Set();
     const forms = [];
+    const paramUrlKeys = new Set();
+    const paramUrls = [];
     const seen = new Set();
     const queue = [{ url: seed, depth: 0 }];
     let visited = 0;
@@ -52,10 +54,19 @@ export async function buildCoverageMap(seed, opts = {}) {
             return;
         }
         endpoints.add(u.pathname);
-        for (const k of u.searchParams.keys())
+        const keys = [...u.searchParams.keys()];
+        for (const k of keys)
             params.add(k);
         if (/\/(?:api|rest)\//.test(u.pathname))
             apis.add(u.pathname);
+        if (keys.length) {
+            const key = u.pathname + '?' + keys.slice().sort().join(',');
+            if (!paramUrlKeys.has(key)) {
+                paramUrlKeys.add(key);
+                if (paramUrls.length < 100)
+                    paramUrls.push(u.toString());
+            }
+        }
     };
     while (queue.length) {
         if (visited >= maxPages) {
@@ -110,6 +121,7 @@ export async function buildCoverageMap(seed, opts = {}) {
         params: [...params].sort(),
         forms,
         apis: [...apis].sort(),
+        paramUrls,
         pagesVisited: visited,
         capped,
     };

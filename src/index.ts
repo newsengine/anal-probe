@@ -85,6 +85,11 @@ export {
   type CoverageMap, type FormSpec, type CrawlMapOptions,
 } from './crawl-map.js';
 export {
+  activeInjectionScan, runDetectors,
+  detectSqlError, detectSqlBoolean, detectSqlTime, detectSsti, detectCmdTime, detectTraversal,
+  type Probe, type Prober, type InjectionHit,
+} from './inject.js';
+export {
   appStyleChecks, detectAppStyles, appStyleRuleSpecs, APP_STYLE_KEYS,
   type AppStyleKey, type AppStyleSignal, type AppStyleRuleSpec,
 } from './appstyle.js';
