@@ -153,4 +153,9 @@ export const CATALOG_NUMBERS: Record<string, number> = {
   "atlas.prompt-injection": 147,
   "atlas.model-enum": 148,
   "components.server-cve.": 149,
+  "inject.sqli": 150,
+  "inject.ssti": 151,
+  "inject.cmdi": 152,
+  "inject.traversal": 153,
+  "inject.none": 154,
 };

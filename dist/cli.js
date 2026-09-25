@@ -17,6 +17,7 @@
 //   --fix-pack <file.md>            write a PR-ready fix pack (header config + per-finding checklist)
 //   --github-issues <owner/repo>    feed findings into the GitHub issue tracker (dry-run; add --apply to write)
 //   --coverage <file.json>          authenticated deep-crawl coverage map (endpoints/params/forms/apis)
+//   --authorized-active             (opt-in, AUTHORIZED) active injection engine: SQLi/SSTI/cmd/traversal on GET params
 //   --allow-report-only-csp         accept CSP Report-Only as a pass
 //   --max-crawl 25                  how many links/scripts to fetch-check
 //   --plugins <dir>                 dir of custom JSON plugin templates (default ./vibetesting-agent-plugins)
@@ -50,6 +51,7 @@ import { buildRunRecord, appendRun, readRuns, renderPriorityReport } from './led
 import { planIssueActions, keyFromBody, summarizeActions } from './issues.js';
 import { renderFixPack } from './fixes.js';
 import { buildCoverageMap, summarizeCoverage } from './crawl-map.js';
+import { activeInjectionScan } from './inject.js';
 import { withCfBypassHeaders } from './cf-bypass-headers.js';
 import { execFileSync } from 'node:child_process';
 const VERSION = (() => {
@@ -580,6 +582,7 @@ async function mainScan() {
         rateLimitScan: flag('--rate-limit-scan') || !!config.rateLimitScan,
         reflectedXss: flag('--xss') || !!config.reflectedXss,
         aiProbe: flag('--ai-probe') || !!config.aiProbe,
+        authorizedActive: flag('--authorized-active'),
     };
     const failOn = (arg('--fail-on') ?? config.failOn ?? 'high');
     const quiet = flag('--quiet') || !!config.quiet;
@@ -609,6 +612,19 @@ async function mainScan() {
     }
     const startedAt = new Date().toISOString();
     const findings = await probe(url, opts);
+    // #43 — active injection engine (opt-in + authorized, non-destructive). Merged into findings so it flows
+    // through the record/report/issue-feed like any other check.
+    if (opts.authorizedActive) {
+        console.error('⚠️  Active injection testing (SQLi/SSTI/cmd/traversal) sends crafted values to GET parameters.\n' +
+            '    Non-destructive (no writes/DoS/brute-force), but only run against targets you OWN or are AUTHORIZED to test.');
+        const ctx = { baseUrl: url, origin: new URL(url).origin, url: new URL(url), res: {}, html: '', headers: new Headers(), opts };
+        try {
+            findings.push(...await activeInjectionScan(ctx));
+        }
+        catch (e) {
+            console.error(`active injection error: ${String(e?.message || e)}`);
+        }
+    }
     const sum = summarize(findings);
     // Run record: every sub-test keyed by its VTA number — logged to the ledger database and used for the
     // Priority-Status report. Built for every scan; only persisted when --ledger is given.

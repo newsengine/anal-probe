@@ -16,6 +16,7 @@ export interface CoverageMap {
   params: string[];      // unique query-parameter names seen
   forms: FormSpec[];     // HTML forms (deduped by action+method+fields)
   apis: string[];        // referenced /api|/rest/* paths
+  paramUrls: string[];   // sample full same-origin URLs that carry a query string (real endpoint+param pairs)
   pagesVisited: number;
   capped: boolean;       // true if a cap stopped the crawl before exhaustion
 }
@@ -57,6 +58,8 @@ export async function buildCoverageMap(seed: string, opts: CrawlMapOptions = {})
   const apis = new Set<string>();
   const formKeys = new Set<string>();
   const forms: FormSpec[] = [];
+  const paramUrlKeys = new Set<string>();
+  const paramUrls: string[] = [];
 
   const seen = new Set<string>();
   const queue: { url: string; depth: number }[] = [{ url: seed, depth: 0 }];
@@ -67,8 +70,13 @@ export async function buildCoverageMap(seed: string, opts: CrawlMapOptions = {})
     if (!sameOrigin(abs, origin)) return;
     let u: URL; try { u = new URL(abs); } catch { return; }
     endpoints.add(u.pathname);
-    for (const k of u.searchParams.keys()) params.add(k);
+    const keys = [...u.searchParams.keys()];
+    for (const k of keys) params.add(k);
     if (/\/(?:api|rest)\//.test(u.pathname)) apis.add(u.pathname);
+    if (keys.length) {
+      const key = u.pathname + '?' + keys.slice().sort().join(',');
+      if (!paramUrlKeys.has(key)) { paramUrlKeys.add(key); if (paramUrls.length < 100) paramUrls.push(u.toString()); }
+    }
   };
 
   while (queue.length) {
@@ -111,6 +119,7 @@ export async function buildCoverageMap(seed: string, opts: CrawlMapOptions = {})
     params: [...params].sort(),
     forms,
     apis: [...apis].sort(),
+    paramUrls,
     pagesVisited: visited,
     capped,
   };

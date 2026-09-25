@@ -11,6 +11,7 @@ export interface CoverageMap {
     params: string[];
     forms: FormSpec[];
     apis: string[];
+    paramUrls: string[];
     pagesVisited: number;
     capped: boolean;
 }

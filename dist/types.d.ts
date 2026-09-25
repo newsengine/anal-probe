@@ -46,6 +46,10 @@ export interface ScanOptions {
     /** Opt-in (ATLAS): send a benign canary prompt-injection probe to a detected chat/LLM endpoint
      *  (AML.T0051). Off by default — it POSTs an (inert) instruction to the model. */
     aiProbe?: boolean;
+    /** Opt-in + AUTHORIZED (#43): run the active injection engine (SQLi/SSTI/cmd/traversal) over discovered
+     *  GET parameters. Off by default; non-destructive (GET only, no writes/DoS/brute-force). Only enable on
+     *  targets you own or are explicitly authorized to test. */
+    authorizedActive?: boolean;
 }
 /** Shared, fetched-once context handed to every check so we hit the homepage a single time. */
 export interface ScanContext {
