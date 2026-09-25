@@ -1,0 +1,70 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { cfBypassHeaders, withCfBypassHeaders } from '../src/cf-bypass-headers.ts';
+
+test('cfBypassHeaders empty without env', () => {
+  const prev = { ...process.env };
+  delete process.env.CF_SMOKE_KEY;
+  delete process.env.X_SMOKE_KEY;
+  delete process.env.SMOKE_KEY;
+  delete process.env.CF_ACCESS_CLIENT_ID;
+  delete process.env.CF_ACCESS_CLIENT_SECRET;
+  try {
+    assert.deepEqual(cfBypassHeaders('https://beta.dynamicbusiness.com'), {});
+  } finally {
+    process.env = prev as NodeJS.ProcessEnv;
+  }
+});
+
+test('cfBypassHeaders smoke key + beta Access', () => {
+  const prev = { ...process.env };
+  process.env.CF_SMOKE_KEY = 'smk_test';
+  process.env.CF_ACCESS_CLIENT_ID = 'id.access';
+  process.env.CF_ACCESS_CLIENT_SECRET = 'cfast_test';
+  try {
+    const beta = cfBypassHeaders('https://beta.dynamicbusiness.com/path');
+    assert.equal(beta['x-smoke-key'], 'smk_test');
+    assert.equal(beta['CF-Access-Client-Id'], 'id.access');
+    assert.equal(beta['CF-Access-Client-Secret'], 'cfast_test');
+
+    const www = cfBypassHeaders('https://www.dynamicbusiness.com');
+    assert.equal(www['x-smoke-key'], 'smk_test');
+    assert.equal(www['CF-Access-Client-Id'], undefined);
+    assert.equal(www['CF-Access-Client-Secret'], undefined);
+
+    const merged = withCfBypassHeaders('https://beta.dynamicbusiness.com', { cookie: 'a=b' });
+    assert.equal(merged?.cookie, 'a=b');
+    assert.equal(merged?.['x-smoke-key'], 'smk_test');
+  } finally {
+    for (const k of Object.keys(process.env)) delete process.env[k];
+    Object.assign(process.env, prev);
+  }
+});
+
+test('cfBypassHeaders Access absent for non-beta hosts (third-party + apex)', () => {
+  const prev = { ...process.env };
+  process.env.CF_SMOKE_KEY = 'smk_test';
+  process.env.CF_ACCESS_CLIENT_ID = 'id.access';
+  process.env.CF_ACCESS_CLIENT_SECRET = 'cfast_test';
+  try {
+    const fonts = cfBypassHeaders('https://fonts.googleapis.com/css?family=Inter');
+    assert.equal(fonts['x-smoke-key'], undefined);
+    assert.equal(fonts['CF-Access-Client-Id'], undefined);
+    assert.equal(fonts['CF-Access-Client-Secret'], undefined);
+    assert.deepEqual(fonts, {});
+
+    const apex = cfBypassHeaders('https://dynamicbusiness.com/');
+    assert.equal(apex['x-smoke-key'], 'smk_test');
+    assert.equal(apex['CF-Access-Client-Id'], undefined);
+    assert.equal(apex['CF-Access-Client-Secret'], undefined);
+
+    const cdn = cfBypassHeaders('https://cdn.jsdelivr.net/npm/foo');
+    assert.deepEqual(cdn, {});
+
+    const pages = cfBypassHeaders('https://db-nextjs-fresh.pages.dev/');
+    assert.deepEqual(pages, {});
+  } finally {
+    for (const k of Object.keys(process.env)) delete process.env[k];
+    Object.assign(process.env, prev);
+  }
+});

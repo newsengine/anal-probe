@@ -13,6 +13,7 @@
 import type { Finding, Severity } from './types.js';
 import { discoverPages, normalizeUrl } from './probe.js';
 import { RENDER_HEALTH_PROBE, renderHealthFindings } from './render-health.js';
+import { installCfBypassRoute } from './cf-bypass-headers.js';
 
 const f = (id: string, title: string, severity: Severity, pass: boolean, detail: string, fix?: string): Finding =>
   ({ category: 'reliability', id, title, severity, pass, detail, fix });
@@ -46,7 +47,21 @@ export async function browseChecks(startUrl: string, opts: { pages?: number; tim
     try { browser = await chromium.launch({ headless: true }); }
     catch { return [f('browse.no-browser', 'no browser available', 'info', true, 'install Chrome, or run `npx playwright install chromium`')]; }
   }
-  const ctx = await browser.newContext({ extraHTTPHeaders: opts.headers });
+  // Never put CF Access / smoke secrets on context-global extraHTTPHeaders —
+  // those leak to every origin (fonts, CDNs, analytics). Host-filter via route.
+  const ctx = await browser.newContext();
+  await installCfBypassRoute(ctx);
+  // Non-CF explicit headers (e.g. cookie) still apply context-wide when provided
+  // by the caller; CF secrets are injected only by the route above.
+  if (opts.headers) {
+    const safe: Record<string, string> = {};
+    for (const [k, v] of Object.entries(opts.headers)) {
+      const key = k.toLowerCase();
+      if (key === 'cf-access-client-id' || key === 'cf-access-client-secret' || key === 'x-smoke-key') continue;
+      safe[k] = v;
+    }
+    if (Object.keys(safe).length) await ctx.setExtraHTTPHeaders(safe);
+  }
 
   const start = normalizeUrl(startUrl);
   const pages = [start, ...(opts.pages && opts.pages > 1 ? await discoverPages(start, opts.pages - 1, { extraHeaders: opts.headers, timeoutMs }) : [])];

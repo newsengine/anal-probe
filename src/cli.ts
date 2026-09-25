@@ -49,6 +49,7 @@ import { initRepo } from './init.js';
 import { buildRunRecord, appendRun, readRuns, renderPriorityReport, type RunRecord } from './ledger.js';
 import { planIssueActions, keyFromBody, summarizeActions, type ExistingIssue } from './issues.js';
 import { renderFixPack } from './fixes.js';
+import { withCfBypassHeaders } from './cf-bypass-headers.js';
 import { execFileSync } from 'node:child_process';
 
 const VERSION = (() => {
@@ -245,6 +246,7 @@ async function runBrowse() {
   const findings = await browseChecks(url, {
     pages: pagesRaw && Number(pagesRaw) > 0 ? Number(pagesRaw) : 1,
     timeoutMs: tRaw && Number(tRaw) > 0 ? Number(tRaw) : undefined,
+    headers: withCfBypassHeaders(url),
   });
   const sum = summarize(findings);
   if (flag('--json')) { console.log(JSON.stringify({ url, summary: sum, findings }, null, 2)); }
@@ -458,7 +460,9 @@ async function mainScan() {
       else { console.error(`--header must be "Name: value" (got "${raw}")`); process.exit(2); }
     }
   }
-  const hasAuth = Object.keys(extraHeaders).length > 0;
+  // Cloudflare bot / Access bypass from env (CF_SMOKE_KEY + beta Access token).
+  // CLI --header/--cookie still win on key collision via withCfBypassHeaders.
+  const mergedHeaders = withCfBypassHeaders(url, Object.keys(extraHeaders).length ? extraHeaders : undefined);
 
   // Options: CLI flags win, else fall back to .analproberc.json.
   const opts: ScanOptions = {
@@ -470,7 +474,7 @@ async function mainScan() {
     maxCrawl: arg('--max-crawl') ? num('--max-crawl', 25) : config.maxCrawl,
     timeoutMs: arg('--timeout') ? num('--timeout', 10_000) : config.timeoutMs,
     pluginsDir: arg('--plugins') ?? config.pluginsDir,
-    extraHeaders: hasAuth ? extraHeaders : undefined,
+    extraHeaders: mergedHeaders,
     apiWrite: flag('--api-write') || !!config.apiWrite,
     rateLimitScan: flag('--rate-limit-scan') || !!config.rateLimitScan,
     reflectedXss: flag('--xss') || !!config.reflectedXss,
@@ -603,7 +607,7 @@ async function mainScan() {
     console.log(JSON.stringify({ url, summary: sum, findings: withStd, ...(compliance ? { compliance } : {}), ...(diff ? { baseline: { new: diff.newFailures.length, accepted: diff.baselined.length } } : {}) }, null, 2));
   } else {
     // --quiet: show only failures (good for CI logs); default shows passes too so a clean scan is visible.
-    console.log(`\n🔬 vibetesting-agent — full app scan of ${url}${hasAuth ? ' (authenticated)' : ''}\n`);
+    console.log(`\n🔬 vibetesting-agent — full app scan of ${url}${mergedHeaders ? ' (authenticated)' : ''}\n`);
     for (const cat of ALL_CATEGORIES) {
       const group = findings.filter((f) => f.category === cat);
       if (!group.length) continue;
