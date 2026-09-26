@@ -241,9 +241,9 @@ Legend — how each check reaches its verdict:
 
 | # | Check ID | Title | Severity | Class | Default | Standards | Since | What it detects |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| VTA-0155 | `db.auth.editor-cms` | Editor reaches CMS surfaces | high | authenticated | opt-in | — | 0.8.0 | Editor session can load /dashboard/editor and /api/editor/posts (skip if VTA_EDITOR_* missing). |
+| VTA-0155 | `db.auth.editor-cms` | Editor reaches CMS surfaces | high | authenticated | opt-in | — | 0.8.0 | Editor cookie session loads /dashboard/editor HTML (not /login) + Bearer reaches /api/editor/posts (skip if VTA_EDITOR_* missing). |
 | VTA-0156 | `db.auth.superadmin-homepage-config` | Superadmin reaches Homepage Config | high | authenticated | opt-in | — | 0.8.0 | Superadmin can GET /api/homepage/config (skip if VTA_SUPERADMIN_* missing). |
-| VTA-0157 | `db.auth.superadmin-ad-placements` | Superadmin reaches Ad Placements UI | high | authenticated | opt-in | — | 0.8.0 | Superadmin can load /dashboard/admin/homepage (Ad Placements tab host; skip if creds missing). |
+| VTA-0157 | `db.auth.superadmin-ad-placements` | Superadmin reaches Ad Placements UI | high | authenticated | opt-in | — | 0.8.0 | Superadmin cookie session loads /dashboard/admin/homepage HTML without /login bounce (skip if creds missing). |
 | VTA-0158 | `db.api.uploads-ad` | POST /api/uploads type=ad accepts tiny PNG | high | authenticated | opt-in | — | 0.8.0 | Authenticated upload of a tiny PNG with type=ad returns 201 (DB #1441 dogfood; skip if auth env missing). |
 | VTA-0159 | `db.api.uploads-empty` | POST /api/uploads empty → 400 No file provided | high | authenticated | opt-in | — | 0.8.0 | Empty multipart upload returns 400 with "No file provided" (DB #1441; skip if auth env missing). |
 | VTA-0160 | `db.api.profiles-rls` | Profiles RLS blocks non-staff dump | high | authenticated | opt-in | — | 0.8.0 | Non-staff Bearer must not list all profiles via Supabase REST (DB #1416; skip if VTA_USER_* missing). |

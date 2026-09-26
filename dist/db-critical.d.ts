@@ -12,7 +12,55 @@ export interface DbCriticalSpec {
 export declare function dbCriticalCheckSpecs(): DbCriticalSpec[];
 /** Minimal RFC 6238 TOTP (SHA-1, 30s, 6 digits) — no extra dependency. */
 export declare function totpCode(secretBase32: string, nowMs?: number): string;
-/** Password-grant a Bearer token. Handles optional TOTP challenge when VTA_TOTP_SECRET is set. */
+/** True for classic eyJ… JWT anon keys (incl. the disabled DB legacy default). */
+export declare function isLegacyJwtAnonKey(key: string): boolean;
+export interface DbCriticalSession {
+    token: string;
+    /** Cookie header value for Next.js middleware (@supabase/ssr base64url chunks). */
+    cookieHeader: string;
+}
+/**
+ * Storage key for Supabase SSR auth cookies.
+ * Prefer project-ref from access_token `iss` (custom domains still mint sb-<ref>-auth-token);
+ * fall back to the configured Supabase URL hostname.
+ */
+export declare function supabaseAuthStorageKey(accessToken: string, supabaseUrl: string): string;
+/** Split a cookie value the same way @supabase/ssr createChunks does. */
+export declare function chunkSupabaseCookie(key: string, value: string, chunkSize?: number): {
+    name: string;
+    value: string;
+}[];
+/** Build Cookie header for Next.js middleware that uses @supabase/ssr createServerClient. */
+export declare function buildSupabaseSsrCookieHeader(session: {
+    access_token: string;
+    refresh_token: string;
+    expires_in?: number;
+    expires_at?: number;
+    token_type?: string;
+    user?: unknown;
+}, supabaseUrl: string): string;
+export type ObtainSessionResult = {
+    token: string;
+    cookieHeader: string;
+    skipReason?: undefined;
+    error?: undefined;
+} | {
+    token?: undefined;
+    cookieHeader?: undefined;
+    skipReason: string;
+    error?: undefined;
+} | {
+    token?: undefined;
+    cookieHeader?: undefined;
+    skipReason?: undefined;
+    error: string;
+};
+/**
+ * Password-grant a session (Bearer + SSR cookie). Handles optional TOTP when VTA_TOTP_SECRET is set.
+ * HTML dashboard routes need the cookie (middleware getUser); API routes keep working with Bearer.
+ */
+export declare function obtainSession(role: DbCriticalRole): Promise<ObtainSessionResult>;
+/** Password-grant a Bearer token (API checks). Prefer obtainSession when HTML cookies are needed. */
 export declare function obtainAccessToken(role: DbCriticalRole): Promise<{
     token?: string;
     skipReason?: string;

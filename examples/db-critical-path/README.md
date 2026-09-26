@@ -8,9 +8,9 @@ auth / fetch / CF-bypass stack — not a parallel framework.
 
 | Check ID | Needs | Asserts |
 |----------|-------|---------|
-| `db.auth.editor-cms` | `VTA_EDITOR_*` | Editor reaches `/dashboard/editor` + `/api/editor/posts` |
+| `db.auth.editor-cms` | `VTA_EDITOR_*` + `VTA_SUPABASE_ANON_KEY` | Editor cookie session loads `/dashboard/editor` HTML; Bearer reaches `/api/editor/posts` |
 | `db.auth.superadmin-homepage-config` | `VTA_SUPERADMIN_*` | `GET /api/homepage/config` → 200 |
-| `db.auth.superadmin-ad-placements` | `VTA_SUPERADMIN_*` | `/dashboard/admin/homepage` reachable (Ad Placements host) |
+| `db.auth.superadmin-ad-placements` | `VTA_SUPERADMIN_*` + anon key | Cookie session loads `/dashboard/admin/homepage` (no `/login` bounce) |
 | `db.api.uploads-ad` | editor or superadmin | `POST /api/uploads` `type=ad` + tiny PNG → 201 (#1441) |
 | `db.api.uploads-empty` | editor or superadmin | empty multipart → 400 `"No file provided"` (#1441) |
 | `db.api.profiles-rls` | `VTA_USER_*` | non-staff cannot dump all profiles via REST (#1416) |
