@@ -11,6 +11,10 @@ import {
   totpCode,
   TINY_PNG,
   runDbCritical,
+  isLegacyJwtAnonKey,
+  supabaseAuthStorageKey,
+  chunkSupabaseCookie,
+  buildSupabaseSsrCookieHeader,
 } from '../dist/db-critical.js';
 import { catalogEntryFor, CATALOG } from '../dist/catalog.js';
 
@@ -89,4 +93,51 @@ test('db-critical: missing creds produce SKIP passes (no false-fail)', async () 
       else process.env[k] = saved[k];
     }
   }
+});
+
+test('db-critical: isLegacyJwtAnonKey detects JWT anon, not publishable', () => {
+  assert.equal(isLegacyJwtAnonKey('sb_publishable_x'), false);
+  assert.equal(isLegacyJwtAnonKey(''), false);
+  const legacy =
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBnb2ZkcGFpbG1oaXV1em55endhIiwicm9sZSI6ImFub24iLCJpYXQiOjE2NzgzNDU4MzUsImV4cCI6MTk5MzkyMTgzNX0.1m9z0lWiULuq_x5cdyFwHHao7_ea4XeZvHVuCG6tnSU';
+  assert.equal(isLegacyJwtAnonKey(legacy), true);
+});
+
+test('db-critical: supabaseAuthStorageKey prefers iss project ref', () => {
+  // header.payload.sig — payload iss = https://pgofdpailmhiuuznyzwa.supabase.co
+  const payload = Buffer.from(JSON.stringify({
+    iss: 'https://pgofdpailmhiuuznyzwa.supabase.co/auth/v1',
+    role: 'authenticated',
+  })).toString('base64url');
+  const token = `eyJhbGciOiJub25lIn0.${payload}.x`;
+  assert.equal(
+    supabaseAuthStorageKey(token, 'https://db.dynamicbusiness.com'),
+    'sb-pgofdpailmhiuuznyzwa-auth-token',
+  );
+});
+
+test('db-critical: chunkSupabaseCookie splits oversized values', () => {
+  const key = 'sb-test-auth-token';
+  const small = chunkSupabaseCookie(key, 'abc');
+  assert.deepEqual(small, [{ name: key, value: 'abc' }]);
+  const big = 'x'.repeat(4000);
+  const parts = chunkSupabaseCookie(key, big, 100);
+  assert.ok(parts.length > 1);
+  assert.equal(parts[0]!.name, `${key}.0`);
+  assert.equal(parts.map((p) => p.value).join(''), big);
+});
+
+test('db-critical: buildSupabaseSsrCookieHeader is base64- prefixed', () => {
+  const payload = Buffer.from(JSON.stringify({
+    iss: 'https://abc123.supabase.co/auth/v1',
+  })).toString('base64url');
+  const access = `eyJhbGciOiJub25lIn0.${payload}.sig`;
+  const header = buildSupabaseSsrCookieHeader({
+    access_token: access,
+    refresh_token: 'r',
+    expires_in: 3600,
+    user: { id: 'u1' },
+  }, 'https://db.example.com');
+  assert.match(header, /^sb-abc123-auth-token(\.\d+)?=base64-/);
+  assert.ok(!header.includes('eyJhbGciOiJub25lIn0'), 'raw JWT must not appear unencoded in cookie name path');
 });

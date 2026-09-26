@@ -10,7 +10,7 @@
 //   VTA_SUPERADMIN_EMAIL / VTA_SUPERADMIN_PASSWORD
 //   VTA_USER_EMAIL / VTA_USER_PASSWORD          (optional; non-staff for profiles RLS)
 //   VTA_TOTP_SECRET                            (optional; MFA for staff login)
-//   VTA_SUPABASE_URL / VTA_SUPABASE_ANON_KEY   (optional; defaults to DB public anon)
+//   VTA_SUPABASE_URL / VTA_SUPABASE_ANON_KEY   (anon/publishable key REQUIRED — legacy JWT anon disabled)
 //   VTA_UNPUBLISHED_ARTICLE_URL                (editorial golden-path fixture)
 //   VTA_STRIPE_AMOUNT_PROBE=1                  (opt-in; otherwise SKIP)
 //   CF_SMOKE_KEY                               (already supported via cf-bypass-headers)
@@ -38,7 +38,7 @@ export function dbCriticalCheckSpecs(): DbCriticalSpec[] {
       title: 'Editor reaches CMS surfaces',
       severity: 'high',
       cls: 'authenticated',
-      description: 'Editor session can load /dashboard/editor and /api/editor/posts (skip if VTA_EDITOR_* missing).',
+      description: 'Editor cookie session loads /dashboard/editor HTML (not /login) + Bearer reaches /api/editor/posts (skip if VTA_EDITOR_* missing).',
     },
     {
       id: 'db.auth.superadmin-homepage-config',
@@ -52,7 +52,7 @@ export function dbCriticalCheckSpecs(): DbCriticalSpec[] {
       title: 'Superadmin reaches Ad Placements UI',
       severity: 'high',
       cls: 'authenticated',
-      description: 'Superadmin can load /dashboard/admin/homepage (Ad Placements tab host; skip if creds missing).',
+      description: 'Superadmin cookie session loads /dashboard/admin/homepage HTML without /login bounce (skip if creds missing).',
     },
     {
       id: 'db.api.uploads-ad',
@@ -156,34 +156,151 @@ function base32Decode(input: string): Buffer {
 }
 
 const DEFAULT_SUPABASE_URL = 'https://db.dynamicbusiness.com';
-// Public anon key (safe to ship — same class as NEXT_PUBLIC_*); override via env in private deploys.
-const DEFAULT_ANON_KEY =
+// Legacy JWT-shaped anon key (role=anon). Dynamic Business disabled this class of key —
+// do NOT use it as a silent default. Kept only so we can detect "caller still on legacy"
+// and fail with a clear override hint.
+const LEGACY_JWT_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBnb2ZkcGFpbG1oaXV1em55endhIiwicm9sZSI6ImFub24iLCJpYXQiOjE2NzgzNDU4MzUsImV4cCI6MTk5MzkyMTgzNX0.1m9z0lWiULuq_x5cdyFwHHao7_ea4XeZvHVuCG6tnSU';
 
-function supabaseConfig(): { url: string; anonKey: string } {
+/** True for classic eyJ… JWT anon keys (incl. the disabled DB legacy default). */
+export function isLegacyJwtAnonKey(key: string): boolean {
+  if (!key) return false;
+  if (key === LEGACY_JWT_ANON_KEY) return true;
+  if (!key.startsWith('eyJ')) return false;
+  const parts = key.split('.');
+  if (parts.length !== 3) return false;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1]!, 'base64url').toString('utf8'));
+    return payload?.role === 'anon';
+  } catch {
+    return false;
+  }
+}
+
+function supabaseConfig(): { url: string; anonKey: string; missingAnon: boolean; legacyAnon: boolean } {
+  const url = (env('VTA_SUPABASE_URL') || env('NEXT_PUBLIC_SUPABASE_URL') || DEFAULT_SUPABASE_URL).replace(/\/$/, '');
+  const anonKey = env('VTA_SUPABASE_ANON_KEY') || env('NEXT_PUBLIC_SUPABASE_ANON_KEY') || '';
   return {
-    url: (env('VTA_SUPABASE_URL') || env('NEXT_PUBLIC_SUPABASE_URL') || DEFAULT_SUPABASE_URL).replace(/\/$/, ''),
-    anonKey: env('VTA_SUPABASE_ANON_KEY') || env('NEXT_PUBLIC_SUPABASE_ANON_KEY') || DEFAULT_ANON_KEY,
+    url,
+    anonKey,
+    missingAnon: !anonKey,
+    legacyAnon: Boolean(anonKey) && isLegacyJwtAnonKey(anonKey),
   };
 }
 
-const tokenCache = new Map<string, string>();
+export interface DbCriticalSession {
+  token: string;
+  /** Cookie header value for Next.js middleware (@supabase/ssr base64url chunks). */
+  cookieHeader: string;
+}
 
-/** Password-grant a Bearer token. Handles optional TOTP challenge when VTA_TOTP_SECRET is set. */
-export async function obtainAccessToken(role: DbCriticalRole): Promise<{ token?: string; skipReason?: string; error?: string }> {
+const sessionCache = new Map<string, DbCriticalSession>();
+
+/** @supabase/ssr cookie chunk size (see node_modules/@supabase/ssr/.../chunker.js). */
+const SSR_COOKIE_MAX_CHUNK = 3180;
+
+/**
+ * Storage key for Supabase SSR auth cookies.
+ * Prefer project-ref from access_token `iss` (custom domains still mint sb-<ref>-auth-token);
+ * fall back to the configured Supabase URL hostname.
+ */
+export function supabaseAuthStorageKey(accessToken: string, supabaseUrl: string): string {
+  try {
+    const payload = JSON.parse(Buffer.from(accessToken.split('.')[1]!, 'base64url').toString('utf8'));
+    const iss = String(payload?.iss || '');
+    if (iss.startsWith('http')) {
+      const host = new URL(iss).hostname.split('.')[0];
+      if (host) return `sb-${host}-auth-token`;
+    }
+  } catch { /* fall through */ }
+  try {
+    const host = new URL(supabaseUrl).hostname.split('.')[0];
+    if (host) return `sb-${host}-auth-token`;
+  } catch { /* fall through */ }
+  return 'sb-auth-token';
+}
+
+/** Split a cookie value the same way @supabase/ssr createChunks does. */
+export function chunkSupabaseCookie(key: string, value: string, chunkSize = SSR_COOKIE_MAX_CHUNK): { name: string; value: string }[] {
+  const encodedValue = encodeURIComponent(value);
+  if (encodedValue.length <= chunkSize) return [{ name: key, value }];
+  const chunks: string[] = [];
+  let remaining = encodedValue;
+  while (remaining.length > 0) {
+    let head = remaining.slice(0, chunkSize);
+    const lastEscapePos = head.lastIndexOf('%');
+    if (lastEscapePos > chunkSize - 3) head = head.slice(0, lastEscapePos);
+    while (head.length > 0) {
+      try {
+        decodeURIComponent(head);
+        break;
+      } catch {
+        if (head.length > 3 && head.at(-3) === '%') head = head.slice(0, -3);
+        else throw new Error('invalid cookie chunk boundary');
+      }
+    }
+    chunks.push(decodeURIComponent(head));
+    remaining = remaining.slice(head.length);
+  }
+  return chunks.map((v, i) => ({ name: `${key}.${i}`, value: v }));
+}
+
+/** Build Cookie header for Next.js middleware that uses @supabase/ssr createServerClient. */
+export function buildSupabaseSsrCookieHeader(
+  session: {
+    access_token: string;
+    refresh_token: string;
+    expires_in?: number;
+    expires_at?: number;
+    token_type?: string;
+    user?: unknown;
+  },
+  supabaseUrl: string,
+): string {
+  const storageKey = supabaseAuthStorageKey(session.access_token, supabaseUrl);
+  const payload = JSON.stringify({
+    access_token: session.access_token,
+    token_type: session.token_type || 'bearer',
+    expires_in: session.expires_in,
+    expires_at: session.expires_at
+      ?? (Math.floor(Date.now() / 1000) + (session.expires_in || 3600)),
+    refresh_token: session.refresh_token,
+    user: session.user ?? null,
+  });
+  const encoded = `base64-${Buffer.from(payload, 'utf8').toString('base64url')}`;
+  return chunkSupabaseCookie(storageKey, encoded)
+    .map(({ name, value }) => `${name}=${value}`)
+    .join('; ');
+}
+
+export type ObtainSessionResult =
+  | { token: string; cookieHeader: string; skipReason?: undefined; error?: undefined }
+  | { token?: undefined; cookieHeader?: undefined; skipReason: string; error?: undefined }
+  | { token?: undefined; cookieHeader?: undefined; skipReason?: undefined; error: string };
+
+/**
+ * Password-grant a session (Bearer + SSR cookie). Handles optional TOTP when VTA_TOTP_SECRET is set.
+ * HTML dashboard routes need the cookie (middleware getUser); API routes keep working with Bearer.
+ */
+export async function obtainSession(role: DbCriticalRole): Promise<ObtainSessionResult> {
   const creds = roleCreds(role);
   if (!creds) {
     const prefix = role === 'user' ? 'VTA_USER' : role === 'editor' ? 'VTA_EDITOR' : 'VTA_SUPERADMIN';
     return { skipReason: `${prefix}_EMAIL / ${prefix}_PASSWORD not set` };
   }
   const cacheKey = `${role}:${creds.email}`;
-  const cached = tokenCache.get(cacheKey);
-  if (cached) return { token: cached };
+  const cached = sessionCache.get(cacheKey);
+  if (cached) return { token: cached.token, cookieHeader: cached.cookieHeader };
 
-  const { url, anonKey } = supabaseConfig();
+  const { url, anonKey, missingAnon, legacyAnon } = supabaseConfig();
+  if (missingAnon) {
+    return {
+      error: 'VTA_SUPABASE_ANON_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY) is required — legacy JWT anon key is disabled',
+    };
+  }
+
   const body: Record<string, string> = { email: creds.email, password: creds.password };
   const totp = env('VTA_TOTP_SECRET');
-  // First attempt without MFA; if server asks for MFA, retry with TOTP when secret present.
   let res = await fetch(`${url}/auth/v1/token?grant_type=password`, {
     method: 'POST',
     headers: { apikey: anonKey, 'content-type': 'application/json' },
@@ -192,7 +309,6 @@ export async function obtainAccessToken(role: DbCriticalRole): Promise<{ token?:
   let json: any = await res.json().catch(() => ({}));
 
   if (!res.ok && totp && /mfa|factor|totp|aalatm/i.test(JSON.stringify(json))) {
-    // Supabase MFA: verify via /auth/v1/factors/... is complex; try password + code field some setups accept.
     res = await fetch(`${url}/auth/v1/token?grant_type=password`, {
       method: 'POST',
       headers: { apikey: anonKey, 'content-type': 'application/json' },
@@ -201,15 +317,37 @@ export async function obtainAccessToken(role: DbCriticalRole): Promise<{ token?:
     json = await res.json().catch(() => ({}));
   }
 
-  if (!res.ok || !json?.access_token) {
+  if (!res.ok || !json?.access_token || !json?.refresh_token) {
     const msg = String(json?.error_description || json?.msg || json?.error || res.status);
     if (/mfa|factor|totp/i.test(msg) && !totp) {
       return { skipReason: `MFA required for ${role} but VTA_TOTP_SECRET not set` };
     }
-    return { error: `auth failed for ${role}: ${msg}`.slice(0, 200) };
+    const legacyHint = legacyAnon
+      ? ' (anon key looks like disabled legacy JWT — set VTA_SUPABASE_ANON_KEY to the publishable key)'
+      : '';
+    return { error: `auth failed for ${role}: ${msg}${legacyHint}`.slice(0, 240) };
   }
-  tokenCache.set(cacheKey, json.access_token);
-  return { token: json.access_token as string };
+
+  const cookieHeader = buildSupabaseSsrCookieHeader({
+    access_token: json.access_token,
+    refresh_token: json.refresh_token,
+    expires_in: json.expires_in,
+    expires_at: json.expires_at,
+    token_type: json.token_type,
+    user: json.user,
+  }, url);
+
+  const session: DbCriticalSession = { token: json.access_token as string, cookieHeader };
+  sessionCache.set(cacheKey, session);
+  return { token: session.token, cookieHeader: session.cookieHeader };
+}
+
+/** Password-grant a Bearer token (API checks). Prefer obtainSession when HTML cookies are needed. */
+export async function obtainAccessToken(role: DbCriticalRole): Promise<{ token?: string; skipReason?: string; error?: string }> {
+  const s = await obtainSession(role);
+  if (s.skipReason) return { skipReason: s.skipReason };
+  if (s.error) return { error: s.error };
+  return { token: s.token };
 }
 
 function originOf(raw: string): string {
@@ -231,6 +369,26 @@ async function authedFetch(
   return fetch(url, { ...init, headers, redirect: 'manual' });
 }
 
+/** HTML dashboard fetch authenticated via Supabase SSR session cookies (middleware getUser). */
+async function cookieFetch(
+  origin: string,
+  path: string,
+  cookieHeader: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const url = origin + path;
+  const headers = withCfBypassHeaders(url, {
+    cookie: cookieHeader,
+    ...(init.headers as Record<string, string> | undefined),
+  })!;
+  return fetch(url, { ...init, headers, redirect: 'manual' });
+}
+
+function bouncedToLogin(res: Response): boolean {
+  const loc = res.headers.get('location') || '';
+  return res.status >= 300 && res.status < 400 && /login/i.test(loc);
+}
+
 /** 1x1 PNG */
 export const TINY_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
@@ -247,25 +405,25 @@ export async function runDbCritical(targetUrl: string, opts: { timeoutMs?: numbe
   // ── A. Auth / role smokes ──────────────────────────────────────────────────
   {
     const spec = dbCriticalCheckSpecs().find((s) => s.id === 'db.auth.editor-cms')!;
-    const auth = await obtainAccessToken('editor');
+    const auth = await obtainSession('editor');
     if (auth.skipReason) out.push(skip(spec.id, spec.title, auth.skipReason));
-    else if (auth.error) out.push(f(spec.id, spec.title, spec.severity, false, auth.error, 'Fix editor credentials / MFA.'));
+    else if (auth.error) out.push(f(spec.id, spec.title, spec.severity, false, auth.error, 'Fix editor credentials / MFA / VTA_SUPABASE_ANON_KEY.'));
     else {
+      // HTML needs SSR cookies (middleware getUser); API keeps proving Bearer access.
       const [page, api] = await Promise.all([
-        authedFetch(origin, '/dashboard/editor/posts', auth.token!, { signal: ac() }),
+        cookieFetch(origin, '/dashboard/editor/posts', auth.cookieHeader!, { signal: ac() }),
         authedFetch(origin, '/api/editor/posts', auth.token!, { signal: ac(), headers: { accept: 'application/json' } }),
       ]);
       const pageBody = await page.text().catch(() => '');
       const apiBody = await api.text().catch(() => '');
-      // Soften: non-auth-challenge on page + API is enough (SPA shells still 200).
       const apiOk = api.status !== 401 && api.status !== 403;
-      const pageReachable = page.status !== 401 && page.status !== 403 && !(page.status >= 300 && page.status < 400 && /login/i.test(page.headers.get('location') || ''));
-      const pass = pageReachable && apiOk;
+      const pageOk = page.status === 200 && !bouncedToLogin(page);
+      const pass = pageOk && apiOk;
       out.push(f(spec.id, spec.title, spec.severity, pass,
         pass
-          ? `editor reached CMS (page ${page.status}, api ${api.status})`
-          : `editor blocked (page ${page.status}, api ${api.status}): ${(apiBody || pageBody).slice(0, 120)}`,
-        pass ? undefined : 'Editor role should reach /dashboard/editor and /api/editor/posts.'));
+          ? `editor reached CMS (page ${page.status} via cookie, api ${api.status} via Bearer)`
+          : `editor blocked (page ${page.status} loc=${(page.headers.get('location') || '').slice(0, 60)}, api ${api.status}): ${(apiBody || pageBody).slice(0, 120)}`,
+        pass ? undefined : 'Editor cookie session should load /dashboard/editor HTML; Bearer should reach /api/editor/posts.'));
     }
   }
 
@@ -288,18 +446,19 @@ export async function runDbCritical(targetUrl: string, opts: { timeoutMs?: numbe
 
   {
     const spec = dbCriticalCheckSpecs().find((s) => s.id === 'db.auth.superadmin-ad-placements')!;
-    const auth = await obtainAccessToken('superadmin');
+    const auth = await obtainSession('superadmin');
     if (auth.skipReason) out.push(skip(spec.id, spec.title, auth.skipReason));
     else if (auth.error) out.push(f(spec.id, spec.title, spec.severity, false, auth.error));
     else {
-      const res = await authedFetch(origin, '/dashboard/admin/homepage', auth.token!, { signal: ac() });
+      const res = await cookieFetch(origin, '/dashboard/admin/homepage', auth.cookieHeader!, { signal: ac() });
       const body = await res.text().catch(() => '');
-      const loc = res.headers.get('location') || '';
-      const bounced = (res.status >= 300 && res.status < 400 && /login/i.test(loc)) || /input#password|Sign in/i.test(body);
-      const pass = res.status !== 401 && res.status !== 403 && !bounced && res.status < 500;
+      const bounced = bouncedToLogin(res) || /input#password|Sign in/i.test(body);
+      const pass = res.status === 200 && !bounced;
       out.push(f(spec.id, spec.title, spec.severity, pass,
-        pass ? `Ad Placements host page → ${res.status}` : `blocked (${res.status}): ${body.slice(0, 120)}`,
-        pass ? undefined : 'Superadmin should reach /dashboard/admin/homepage (Ad Placements).'));
+        pass
+          ? `Ad Placements host page → ${res.status} via cookie`
+          : `blocked (${res.status} loc=${(res.headers.get('location') || '').slice(0, 60)}): ${body.slice(0, 120)}`,
+        pass ? undefined : 'Superadmin cookie session should load /dashboard/admin/homepage (Ad Placements).'));
     }
   }
 
