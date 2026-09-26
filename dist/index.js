@@ -31,3 +31,4 @@ export { buildCoverageMap, parseForms, summarizeCoverage, } from './crawl-map.js
 export { activeInjectionScan, runDetectors, detectSqlError, detectSqlBoolean, detectSqlTime, detectSsti, detectCmdTime, detectTraversal, } from './inject.js';
 export { appStyleChecks, detectAppStyles, appStyleRuleSpecs, APP_STYLE_KEYS, } from './appstyle.js';
 export { cfBypassHeaders, withCfBypassHeaders, installCfBypassRoute, isSmokeKeyHost, isBetaAccessHost, BETA_ACCESS_HOST } from './cf-bypass-headers.js';
+export { runDbCritical, dbCriticalCheckSpecs, obtainAccessToken, totpCode, TINY_PNG, htmlReflectsXss, profilesDumpDetected, } from './db-critical.js';

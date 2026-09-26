@@ -8,7 +8,7 @@ export type CheckClass = 'passive' | 'probe' | 'active' | 'authenticated' | 'whi
 export interface CheckSpec {
     /** Stable finding id, or — when `dynamic` — the id prefix the engine appends a target to. */
     id: string;
-    category: Category | 'testkit';
+    category: Category | 'testkit' | 'dbcms';
     /** Short human name for the catalog. */
     title: string;
     /** Typical severity when it fails (some vary at runtime by context). */

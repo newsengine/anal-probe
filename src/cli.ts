@@ -33,6 +33,7 @@
 //   vibetesting-agent audit [--prod] [--level low|moderate|high|critical] [--json]
 //   vibetesting-agent init <url> [--name app] [--force] [--cwd .]   # scaffold Gherkin + CI + review md
 //   vibetesting-agent review <url> [...]   # scan + agent-report + gherkin (security-review workflow)
+//   vibetesting-agent db-critical <url>      # Dynamic Business CMS critical-path (auth/API; skips if env missing)
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -316,6 +317,37 @@ async function runSeparation() {
   process.exit(results.some((r) => r.verdict === 'leak') ? 1 : 0);
 }
 
+
+// Dynamic Business CMS critical-path suite (auth/API dogfood). Missing creds SKIP, never false-fail.
+async function runDbCritical() {
+  const target = process.argv[3];
+  if (!target || target.startsWith('-')) {
+    console.error('usage: vibetesting-agent db-critical <url> [--json] [--quiet] [--timeout ms]\n       Env: VTA_EDITOR_EMAIL/PASSWORD, VTA_SUPERADMIN_EMAIL/PASSWORD, optional VTA_USER_*, VTA_TOTP_SECRET,\n            VTA_UNPUBLISHED_ARTICLE_URL, VTA_STRIPE_AMOUNT_PROBE=1, CF_SMOKE_KEY (see examples/db-critical-path/)');
+    process.exit(2); return;
+  }
+  const { runDbCritical: run } = await import('./db-critical.js');
+  const url = normalizeUrl(target);
+  const tRaw = arg('--timeout');
+  const findings = await run(url, { timeoutMs: tRaw && Number(tRaw) > 0 ? Number(tRaw) : undefined });
+  const sum = summarize(findings);
+  if (flag('--json')) { console.log(JSON.stringify({ url, summary: sum, findings }, null, 2)); }
+  else {
+    const quiet = flag('--quiet');
+    console.log(`\n📰 vibetesting-agent db-critical — Dynamic Business CMS critical path on ${url}\n`);
+    for (const fnd of findings) {
+      if (quiet && fnd.pass) continue;
+      const skipped = fnd.pass && /^SKIP:/i.test(fnd.detail);
+      console.log(`  ${fnd.pass ? (skipped ? '⏭ ' : '✅') : SEV_ICON[fnd.severity]} [${fnd.severity.toUpperCase()}] ${fnd.title}`);
+      console.log(`        ${fnd.detail}`);
+      if (!fnd.pass && fnd.fix) console.log(`        ↳ fix: ${fnd.fix}`);
+    }
+    const skips = findings.filter((fnd) => fnd.pass && /^SKIP:/i.test(fnd.detail)).length;
+    console.log(`\n${sum.passed} passed (${skips} skipped), ${sum.failed} failed  (🟥 ${sum.failHigh} · 🟧 ${sum.failMedium} · 🟨 ${sum.failLow})\n`);
+  }
+  // Skips are passes — only real failures (esp. high) gate exit.
+  process.exit(findings.some((fnd) => !fnd.pass && (fnd.severity === 'high' || fnd.severity === 'medium')) ? 1 : 0);
+}
+
 // "Extra batteries" deep browser crawl + SAFE audit (needs playwright-core + Chrome).
 async function runCrawl() {
   const target = process.argv[3];
@@ -423,6 +455,7 @@ async function main() {
   if (process.argv[2] === 'browse') return runBrowse();
   if (process.argv[2] === 'cve') return runCve();
   if (process.argv[2] === 'separation') return runSeparation();
+  if (process.argv[2] === 'db-critical') return runDbCritical();
   if (process.argv[2] === 'crawl') return runCrawl();
   if (process.argv[2] === 'init') return runInit();
   if (process.argv[2] === 'review') return runReview();
