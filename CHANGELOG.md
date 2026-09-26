@@ -7,6 +7,13 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Dynamic Business CMS critical-path suite (`vibetesting-agent db-critical <url>`):**
+  authenticated editor/superadmin CMS smokes, `/api/uploads` type=ad + empty→400 (#1441),
+  profiles RLS non-staff dump guard (#1416), ad-track/unsubscribe XSS hygiene, optional Stripe
+  amount dual-path (`VTA_STRIPE_AMOUNT_PROBE=1`), and editorial golden-path scaffold
+  (`VTA_UNPUBLISHED_ARTICLE_URL`). Missing creds/fixtures **SKIP** (never false-fail). Catalogued
+  under **dbcms** with stable `VTA-NNNN` ids (`npm run catalog`); see `examples/db-critical-path/`.
+
 - **Active injection engine (`--authorized-active`, `inject.*`):** opt-in, authorized, **non-destructive**
   parameter-driven testing over the coverage map's real GET parameters — **SQL injection** (error /
   boolean / time-based), **server-side template injection** (7*7→49), **OS command injection**

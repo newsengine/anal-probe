@@ -19,3 +19,4 @@ examples/security-suite/config.json
 
 # allow committed env *examples* (var names only)
 !.env.cf-bots.example
+!examples/db-critical-path/.env.example

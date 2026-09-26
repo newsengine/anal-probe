@@ -78,6 +78,7 @@ every failing finding comes with a one-line **fix**. Exits non-zero so it double
   `classifyTenantAccess`, `findSensitiveFields`, `checkSecurityHeaders`, `checkCookieFlags`, `scanSecrets`):
   import into your own test suite (jest/vitest/node:test) for RBAC, cross-tenant/IDOR, mass-assignment,
   header/cookie/secret assertions. See `examples/security-suite/` + `examples/tenant-isolation/`.
+  Dynamic Business CMS critical path: `vibetesting-agent db-critical <url>` (see `examples/db-critical-path/`).
 - **Templates**: `SECURITY.md`, `security.txt`, `CODEOWNERS`.
 - **Reusable GitHub Actions workflow**: `.github/workflows/probe.yml` (call it with `uses:`).
 
@@ -185,6 +186,20 @@ vibetesting-agent audit --prod --level moderate --json
 > (`--cookie`/`--header`), **multi-page crawl** (`--crawl`), config file + batch (`--urls`), and the
 > opt-in **`recon`** (port scan) + **`browse`** (browser-functional) modes.
 > Roadmap (PRs welcome): framework preset configs, deeper CVE-informational service ID.
+
+### `db-critical` — Dynamic Business CMS critical path
+
+Persists DB's authenticated critical-path E2E coverage into the official checklist
+(`docs/CHECKS.md`, stable `VTA-NNNN` under the **dbcms** category): editor/superadmin CMS
+smokes, `/api/uploads` dogfood (#1441), profiles RLS (#1416), ad-track/unsubscribe XSS hygiene,
+optional Stripe dual-path, and an editorial golden-path scaffold.
+
+```bash
+source ~/.config/db-eng/vta-db-critical.env   # VTA_EDITOR_* / VTA_SUPERADMIN_* (never commit)
+vibetesting-agent db-critical https://dynamicbusiness.com
+```
+
+Missing credentials **SKIP** (pass) — they never false-fail. See [`examples/db-critical-path/`](examples/db-critical-path/).
 
 ### Cloudflare bot / Access bypass (Dynamic Business)
 

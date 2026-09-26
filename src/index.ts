@@ -94,3 +94,9 @@ export {
   type AppStyleKey, type AppStyleSignal, type AppStyleRuleSpec,
 } from './appstyle.js';
 export { cfBypassHeaders, withCfBypassHeaders, installCfBypassRoute, isSmokeKeyHost, isBetaAccessHost, BETA_ACCESS_HOST } from './cf-bypass-headers.js';
+
+export {
+  runDbCritical, dbCriticalCheckSpecs, obtainAccessToken, totpCode, TINY_PNG,
+  htmlReflectsXss, profilesDumpDetected,
+  type DbCriticalSpec, type DbCriticalRole,
+} from './db-critical.js';
