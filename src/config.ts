@@ -1,8 +1,8 @@
 // src/config.ts
-// Optional .analproberc.json for repeated/CI use: default flags so you don't retype them. CLI flags
+// Optional .vibe-testing-agentrc.json for repeated/CI use: default flags so you don't retype them. CLI flags
 // always override the file. Kept intentionally small — it only carries the knobs people repeat.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 
 export interface FileConfig {
   only?: string[];
@@ -22,12 +22,18 @@ export interface FileConfig {
   aiProbe?: boolean;
 }
 
+const DEFAULT_CONFIG = '.vibe-testing-agentrc.json';
+const LEGACY_CONFIG = '.analproberc.json';
+
 /**
- * Load config from an explicit path or the default `.analproberc.json` in cwd. A missing DEFAULT file is
+ * Load config from an explicit path or the default `.vibe-testing-agentrc.json` in cwd. A missing DEFAULT file is
  * fine (returns {}); a missing/invalid EXPLICIT path is an error the caller should surface.
  */
 export function loadConfig(explicitPath?: string): { config: FileConfig; error?: string } {
-  const path = explicitPath || '.analproberc.json';
+  let path = explicitPath || DEFAULT_CONFIG;
+  if (!explicitPath && !existsSync(path) && existsSync(LEGACY_CONFIG)) {
+    path = LEGACY_CONFIG;
+  }
   let config: FileConfig;
   try {
     config = JSON.parse(readFileSync(path, 'utf8')) as FileConfig;

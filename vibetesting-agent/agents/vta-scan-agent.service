@@ -1,5 +1,5 @@
 [Unit]
-Description=VibeTesting Agent full-suite scan worker (anal-probe)
+Description=Vibe Testing Agent full-suite scan worker
 After=network-online.target
 Wants=network-online.target
 

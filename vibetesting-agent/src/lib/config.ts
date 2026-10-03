@@ -37,7 +37,7 @@ export const config = {
     /** If true, Checkout shows a public "promotion code" box. Default off (private promos only). */
     allowPromotionCodes: req('STRIPE_ALLOW_PROMOTION_CODES', 'false') === 'true',
   },
-  scannerCli: req('ANAL_PROBE_CLI', ''),
+  scannerCli: req('VIBE_TESTING_AGENT_CLI') || req('ANAL_PROBE_CLI', ''),
   /** Shared secret for OVH full-scan agents (Authorization: Bearer …) */
   scanAgentSecret: req('SCAN_AGENT_SECRET'),
   emailFrom: req('EMAIL_FROM', 'VibeTesting Agent <noreply@vibetestingagent.com>'),

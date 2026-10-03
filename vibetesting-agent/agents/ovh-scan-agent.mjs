@@ -5,7 +5,7 @@
  * - Blocks private/metadata targets (SSRF)
  * - HMAC-signs completion payloads
  *
- * Env: VTA_API_URL, SCAN_AGENT_SECRET, ANAL_PROBE_CLI, AGENT_ID, POLL_MS
+ * Env: VTA_API_URL, SCAN_AGENT_SECRET, VIBE_TESTING_AGENT_CLI, AGENT_ID, POLL_MS
  */
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -22,7 +22,7 @@ const API = (process.env.VTA_API_URL || 'https://vibetesting-agent.dynamicbusine
 const SECRET = process.env.SCAN_AGENT_SECRET || '';
 const AGENT_ID = process.env.AGENT_ID || 'jclaw1';
 const POLL_MS = Number(process.env.POLL_MS || 5000);
-const CLI = process.env.ANAL_PROBE_CLI || '/opt/vta/vibetesting-agent/dist/cli.js';
+const CLI = process.env.VIBE_TESTING_AGENT_CLI || process.env.ANAL_PROBE_CLI || '/opt/vta/vibetesting-agent/dist/cli.js';
 
 if (!SECRET) {
   console.error('SCAN_AGENT_SECRET required');

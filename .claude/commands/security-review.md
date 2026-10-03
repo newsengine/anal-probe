@@ -9,7 +9,7 @@ Run a full **vibetesting-agent** security review for this project (or the given 
 
 ## Inputs
 
-- URL: `$ARGUMENTS` if provided, else read from `vibetesting-agent.config.json` `url`, else `ANAL_PROBE_URL`, else ask once.
+- URL: `$ARGUMENTS` if provided, else read from `vibetesting-agent.config.json` `url`, else `VIBE_TESTING_AGENT_URL`, else ask once.
 - Always confirm the user owns / is authorized to test the target before scanning.
 
 ## Steps
