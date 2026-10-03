@@ -233,11 +233,11 @@ jobs:
 > **Private repo?** `uses:` a reusable workflow from a private repo needs org "Actions access" enabled.
 > The portable pattern that always works is **checkout-with-token + run the committed `dist/`** (this
 > repo commits its build, so there's no build step). One-time: add a fine-grained PAT with
-> **Contents: Read** on `newsengine/vibetesting-agent` as an **org secret** named `ANALPROBE_TOKEN`:
+> **Contents: Read** on `newsengine/vibetesting-agent` as an **org secret** named `VIBE_TESTING_AGENT_TOKEN`:
 > ```yaml
 >   steps:
 >     - uses: actions/checkout@v4
->       with: { repository: newsengine/vibetesting-agent, token: '${{ secrets.ANALPROBE_TOKEN }}', path: .kit }
+>       with: { repository: newsengine/vibetesting-agent, token: '${{ secrets.VIBE_TESTING_AGENT_TOKEN }}', path: .kit }
 >     - run: node .kit/dist/cli.js https://your-deploy.example.com --fail-on high
 > ```
 
@@ -249,7 +249,7 @@ jobs:
     permissions: { security-events: write, contents: read }
     steps:
       - uses: actions/checkout@v4
-        with: { repository: newsengine/vibetesting-agent, token: '${{ secrets.ANALPROBE_TOKEN }}', path: .kit }
+        with: { repository: newsengine/vibetesting-agent, token: '${{ secrets.VIBE_TESTING_AGENT_TOKEN }}', path: .kit }
       - run: node .kit/dist/cli.js https://your-deploy.example.com --sarif > probe.sarif
         continue-on-error: true          # don't block the upload; gate in a separate step if you want
       - uses: github/codeql-action/upload-sarif@v3

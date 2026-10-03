@@ -116,24 +116,25 @@ import assert from 'node:assert/strict';
 
 setDefaultTimeout(120_000);
 
-let targetUrl = process.env.ANAL_PROBE_URL || '';
+let targetUrl = process.env.VIBE_TESTING_AGENT_URL || process.env.ANAL_PROBE_URL || '';
 let lastFindings = [];
 let lastSummary = null;
 
 function runProbe(args = []) {
-  if (!targetUrl) throw new Error('Set ANAL_PROBE_URL or Background URL');
+  if (!targetUrl) throw new Error('Set VIBE_TESTING_AGENT_URL or Background URL');
+  const cliPath = process.env.VIBE_TESTING_AGENT_CLI || process.env.ANAL_PROBE_CLI;
   const r = spawnSync(
     process.execPath,
     [
       // prefer local dist when monorepo-linked; else npx
-      ...(process.env.ANAL_PROBE_CLI
-        ? [process.env.ANAL_PROBE_CLI, targetUrl, '--json', ...args]
+      ...(cliPath
+        ? [cliPath, targetUrl, '--json', ...args]
         : ['--experimental-vm-modules']), // placeholder if using npx below
     ],
     { encoding: 'utf8', env: process.env },
   );
-  // Prefer npx when ANAL_PROBE_CLI unset
-  const out = process.env.ANAL_PROBE_CLI
+  // Prefer npx when CLI path unset
+  const out = cliPath
     ? r.stdout
     : spawnSync('npx', ['--yes', 'github:newsengine/vibetesting-agent', targetUrl, '--json', ...args], {
         encoding: 'utf8',
@@ -167,7 +168,7 @@ When('I scan category {string}', (cat) => {
 });
 
 When('I run a full black-box scan with baseline', () => {
-  const baseline = process.env.ANAL_PROBE_BASELINE;
+  const baseline = process.env.VIBE_TESTING_AGENT_BASELINE || process.env.ANAL_PROBE_BASELINE;
   runProbe(baseline ? ['--baseline', baseline] : []);
 });
 

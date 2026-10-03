@@ -501,7 +501,7 @@ async function mainScan() {
   // CLI --header/--cookie still win on key collision via withCfBypassHeaders.
   const mergedHeaders = withCfBypassHeaders(url, Object.keys(extraHeaders).length ? extraHeaders : undefined);
 
-  // Options: CLI flags win, else fall back to .analproberc.json.
+  // Options: CLI flags win, else fall back to .vibe-testing-agentrc.json.
   const opts: ScanOptions = {
     only: list(arg('--only')) ?? (config.only as Category[] | undefined),
     skip: list(arg('--skip')) ?? (config.skip as Category[] | undefined),
